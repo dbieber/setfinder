@@ -1,0 +1,7 @@
+1.jpg: one solid green rounded-rectangle
+2.jpg: two empty purple rounded-rectangle
+3.jpg: two empty purple rounded-rectangle
+4.jpg: two empty purple rounded-rectangle
+5.jpg: two empty purple rounded-rectangle, three striped red rounded-rectangle, one striped red squiggle, three solid red rounded-rectangle
+6.jpg: two empty purple rounded-rectangle, three striped red rounded-rectangle, one striped red squiggle, three solid red rounded-rectangle
+7.jpg: two empty purple rounded-rectangle, three striped red rounded-rectangle, one striped red squiggle, three solid red rounded-rectangle, two empty red diamond, three solid purple rounded-rectangle, three empty red rounded-rectangle
