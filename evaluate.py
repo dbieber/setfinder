@@ -36,14 +36,20 @@ def generate_groundtruth(filename="data/_ground_truth.txt"):
         card_outputs = []
 
         for i, card in enumerate(cards):
-            print "Click the corners of the %s" % card
+            attrs = attrs_from_card(card)
+            print "Click the corners of the %s" % ' '.join(attrs)
+
+            already_points = points_from_card(card)
+            if already_points:
+                current_points = already_points
+                print "Already at %s" % str(current_points)
 
             while True:
                 if len(current_points) == 4:
                     # Finished with that image!
                     print current_points
 
-                    card_outputs.append("%s %s" % (card, ", ".join(str(x) for x in current_points)))
+                    card_outputs.append("%s %s" % (' '.join(attrs), ", ".join(str(x) for x in current_points)))
 
                     current_points = []
                     break
@@ -61,39 +67,41 @@ def attrs_from_card(card):
 
 def points_from_card(card):
     tokens = card.split(" ")
-    points = eval("[%s]" % ''.join(tokens[4:]))
-    return points
+    if len(tokens) > 4:
+        points = eval("[%s]" % ''.join(tokens[4:]))
+        return points
 
 def main():
     c = CardIdentifier()
 
-    # Train
-    X = []
-    Y = []
-    for i, (filename, cards) in enumerate(groundtruth("data/ground_truth2.txt")):
-        image = cv2.imread(filename)
-        for card in cards:
-            pts = points_from_card(card)
-            cardimage = c.rectify(image, pts)
+    # # Train
+    # X = []
+    # Y = []
+    # for i, (filename, cards) in enumerate(groundtruth("data/ground_truth.txt")):
+    #     image = cv2.imread(filename)
+    #     for card in cards:
+    #         pts = points_from_card(card)
+    #         cardimage = c.rectify(image, pts)
 
-            X.append(cardimage)
-            Y.append(attrs_from_card(card))
+    #         X.append(cardimage)
+    #         Y.append(attrs_from_card(card))
 
-    Y = np.array(Y)
-    c.fit(X, Y)
+    # Y = np.array(Y)
+    # c.fit(X, Y)
 
     cv2.namedWindow("w1", cv.CV_WINDOW_AUTOSIZE)
-    for i, (filename, cards) in enumerate(groundtruth("data/ground_truth2.txt")):
+    for i, (filename, cards) in enumerate(groundtruth("data/ground_truth.txt")):
         for card in cards:
             pts = points_from_card(card)
             image = cv2.imread(filename)
             image = c.rectify(image, pts)
 
             cv2.destroyWindow("w1")
-            # cv2.imshow("w1", image)
+            cv2.imshow("w1", image)
             print card
+            raw_input()
             # print c.predict_color(image)
-            print c.predict_shape(image)
+            # print c.predict_shape(image)
 
 if __name__ == "__main__":
     main()

@@ -18,6 +18,7 @@ class CardIdentifier():
         self.patch_clusterer = None
         self.shape_clf = None
 
+    # Black and white patches
     def patches_from(self, image):
         y,x,depth = image.shape
         patches = []
@@ -26,6 +27,7 @@ class CardIdentifier():
         # for i in xrange(self.patches_per_image):
         #     ry = random.randint(0, y - ps - 1)
         #     rx = random.randint(0, x - ps - 1)
+        # TODO(Black and white)
         for ry in np.arange(0,1,1.0/10):
             for rx in np.arange(0,1,1.0/10):
                 sy = ry * (y-ps)
@@ -91,7 +93,6 @@ class CardIdentifier():
         color_counts[0] = 0
         color_counts[1] = 0
         color_counts[2] = 0
-        print color_counts
         return color_names[np.argmax(color_counts)]
 
     def predict(self, image):
