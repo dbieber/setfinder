@@ -37,7 +37,8 @@ def generate_groundtruth(filename="data/_ground_truth.txt"):
 
         for i, card in enumerate(cards):
             attrs = attrs_from_card(card)
-            print "Click the corners of the %s" % ' '.join(attrs)
+            attrs_str = ' '.join(attrs)
+            print "Click the corners of the %s" % attrs_str
 
             already_points = points_from_card(card)
             if already_points:
@@ -47,16 +48,18 @@ def generate_groundtruth(filename="data/_ground_truth.txt"):
             while True:
                 if len(current_points) == 4:
                     # Finished with that image!
-                    print current_points
-
-                    card_outputs.append("%s %s" % (' '.join(attrs), ", ".join(str(x) for x in current_points)))
+                    points_str = ", ".join(str(x) for x in current_points)
+                    print points_str
+                    card_outputs.append("%s %s" % (attrs_str, points_str))
 
                     current_points = []
                     break
                 if cv.WaitKey(10) == 27:
+                    card_outputs.append("%s" % attrs_str)
+                    current_points = []
                     break
 
-        line = "%s: %s" % (filename, ";".join(card_outputs))
+        line = "%s: %s" % (filename, "; ".join(card_outputs))
         output.write("%s\n" % line)
 
     output.close()
@@ -104,5 +107,5 @@ def main():
             # print c.predict_shape(image)
 
 if __name__ == "__main__":
-    main()
-    # generate_groundtruth()
+    # main()
+    generate_groundtruth()
