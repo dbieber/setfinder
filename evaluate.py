@@ -77,13 +77,19 @@ def points_from_card(card):
 def main():
     c = CardIdentifier()
 
-    # # Train
+    # Train
     # X = []
     # Y = []
     # for i, (filename, cards) in enumerate(groundtruth("data/ground_truth.txt")):
     #     image = cv2.imread(filename)
-    #     for card in cards:
+    #     for j, card in enumerate(cards):
+    #         if j == 10:
+    #             break
+
     #         pts = points_from_card(card)
+    #         if not pts:
+    #             continue
+
     #         cardimage = c.rectify(image, pts)
 
     #         X.append(cardimage)
@@ -97,15 +103,20 @@ def main():
         for card in cards:
             pts = points_from_card(card)
             image = cv2.imread(filename)
+            if not pts:
+                continue
+
             image = c.rectify(image, pts)
 
             cv2.destroyWindow("w1")
             cv2.imshow("w1", image)
             print card
-            raw_input()
             # print c.predict_color(image)
+            # print c.predict_number(image),
+            # print c.predict_shading(image),
             # print c.predict_shape(image)
+            raw_input()
 
 if __name__ == "__main__":
-    # main()
-    generate_groundtruth()
+    main()
+    # generate_groundtruth()

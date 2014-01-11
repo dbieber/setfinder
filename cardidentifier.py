@@ -17,22 +17,24 @@ class CardIdentifier():
         # The classifiers used for identification
         self.patch_clusterer = None
         self.shape_clf = None
+        self.number_clf = None
+        self.shading_clf = None
 
     # Black and white patches
     def patches_from(self, image):
-        y,x,depth = image.shape
+        image = cv2.cvtColor(image, cv.CV_RGB2GRAY)
+        y,x = image.shape
         patches = []
 
         ps = self.patch_size
         # for i in xrange(self.patches_per_image):
         #     ry = random.randint(0, y - ps - 1)
         #     rx = random.randint(0, x - ps - 1)
-        # TODO(Black and white)
         for ry in np.arange(0,1,1.0/10):
             for rx in np.arange(0,1,1.0/10):
                 sy = ry * (y-ps)
                 sx = rx * (x-ps)
-                patch = image[sy:sy+ps,sx:sx+ps,:]
+                patch = image[sy:sy+ps,sx:sx+ps]
                 patch = np.reshape(patch, np.prod(patch.shape))
                 patches.append(patch)
 
@@ -60,10 +62,25 @@ class CardIdentifier():
         for image, card in zip(X, Y):
             bags.append(self.bag_from(image))
 
+        NUMBER = 0
+        SHADING = 1
+        COLOR = 2
         SHAPE = 3
         print "Training on shapes..."
+        self.number_clf = SVC()
+        self.number_clf.fit(bags, Y[:,NUMBER])
+        self.shading_clf = SVC()
+        self.shading_clf.fit(bags, Y[:,SHADING])
         self.shape_clf = SVC()
         self.shape_clf.fit(bags, Y[:,SHAPE])
+
+    def predict_number(self, image):
+        bag = self.bag_from(image)
+        return self.number_clf.predict(bag)
+
+    def predict_shading(self, image):
+        bag = self.bag_from(image)
+        return self.shading_clf.predict(bag)
 
     def predict_shape(self, image):
         bag = self.bag_from(image)
