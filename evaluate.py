@@ -78,25 +78,25 @@ def main():
     c = CardIdentifier()
 
     # Train
-    # X = []
-    # Y = []
-    # for i, (filename, cards) in enumerate(groundtruth("data/ground_truth.txt")):
-    #     image = cv2.imread(filename)
-    #     for j, card in enumerate(cards):
-    #         if j == 10:
-    #             break
+    X = []
+    Y = []
+    for i, (filename, cards) in enumerate(groundtruth("data/ground_truth.txt")):
+        image = cv2.imread(filename)
+        for j, card in enumerate(cards):
+            if j == 10:
+                break
 
-    #         pts = points_from_card(card)
-    #         if not pts:
-    #             continue
+            pts = points_from_card(card)
+            if not pts:
+                continue
 
-    #         cardimage = c.rectify(image, pts)
+            cardimage = c.rectify(image, pts)
 
-    #         X.append(cardimage)
-    #         Y.append(attrs_from_card(card))
+            X.append(cardimage)
+            Y.append(attrs_from_card(card))
 
-    # Y = np.array(Y)
-    # c.fit(X, Y)
+    Y = np.array(Y)
+    c.fit(X, Y)
 
     cv2.namedWindow("w1", cv.CV_WINDOW_AUTOSIZE)
     for i, (filename, cards) in enumerate(groundtruth("data/ground_truth.txt")):
@@ -112,9 +112,9 @@ def main():
             cv2.imshow("w1", image)
             print card
             # print c.predict_color(image)
-            # print c.predict_number(image),
-            # print c.predict_shading(image),
-            # print c.predict_shape(image)
+            print c.predict_number(image)[0],
+            print c.predict_shading(image)[0],
+            print c.predict_shape(image)[0]
             raw_input()
 
 if __name__ == "__main__":

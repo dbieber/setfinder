@@ -8,10 +8,12 @@ from sklearn.cluster import KMeans
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 
+SIFT_extractor = cv2.DescriptorExtractor_create("SIFT")
+
 class CardIdentifier():
     def __init__(self):
         self.n_clusters = 40
-        self.patch_size = 25
+        self.patch_size = 9
         self.patches_per_image = 100
 
         # The classifiers used for identification
@@ -24,16 +26,23 @@ class CardIdentifier():
     def patches_from(self, image):
         image = cv2.cvtColor(image, cv.CV_RGB2GRAY)
         y,x = image.shape
+        image = image[20:120,20:80]
+        y,x = image.shape
         patches = []
+
+
 
         ps = self.patch_size
         # for i in xrange(self.patches_per_image):
         #     ry = random.randint(0, y - ps - 1)
         #     rx = random.randint(0, x - ps - 1)
-        for ry in np.arange(0,1,1.0/10):
-            for rx in np.arange(0,1,1.0/10):
+        for ry in np.arange(0,1,1.0/20):
+            for rx in np.arange(0,1,1.0/20):
                 sy = ry * (y-ps)
                 sx = rx * (x-ps)
+
+
+
                 patch = image[sy:sy+ps,sx:sx+ps]
                 patch = np.reshape(patch, np.prod(patch.shape))
                 patches.append(patch)
@@ -53,9 +62,11 @@ class CardIdentifier():
         for image, card in zip(X, Y):
             patches.extend(self.patches_from(image))
 
-        print "Clustering patches..."
+        print "Clustering %d patches..." % len(patches)
         self.patch_clusterer = KMeans(init='k-means++', n_clusters=self.n_clusters)
         self.patch_clusterer.fit(patches)
+        print "self.patch_clusterer.get_params()"
+        print self.patch_clusterer.get_params()
 
         bags = []
         print "Creating bags..."
@@ -66,7 +77,7 @@ class CardIdentifier():
         SHADING = 1
         COLOR = 2
         SHAPE = 3
-        print "Training on shapes..."
+        print "Training on shapes, numbers, and shadings..."
         self.number_clf = SVC()
         self.number_clf.fit(bags, Y[:,NUMBER])
         self.shading_clf = SVC()
