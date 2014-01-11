@@ -1,0 +1,6 @@
+data/input_images/1.jpg: one solid green rounded-rectangle (247, 262), (255, 115), (482, 120), (479, 270)
+data/input_images/2.jpg: two empty purple rounded-rectangle (208, 267), (210, 91), (490, 88), (486, 277)
+data/input_images/3.jpg: two empty purple rounded-rectangle (184, 225), (177, 96), (355, 153), (352, 301)
+data/input_images/4.jpg: two empty purple rounded-rectangle (210, 224), (151, 107), (335, 157), (385, 286)
+data/input_images/5.jpg: two empty purple rounded-rectangle (128, 253), (159, 175), (270, 232), (238, 309); three striped red rounded-rectangle (181, 138), (172, 54), (295, 23), (308, 114); one striped red squiggle (305, 326), (289, 236), (425, 211), (444, 306); three solid red rounded-rectangle (389, 1), (473, 36), (408, 174), (329, 138)
+data/input_images/6.jpg: two empty purple rounded-rectangle (224, 234), (235, 178), (286, 225), (278, 291); three striped red rounded-rectangle (238, 146), (230, 74), (283, 44), (297, 125); one striped red squiggle (308, 311), (295, 234), (370, 220), (388, 313); three solid red rounded-rectangle (334, 11), (393, 37), (355, 183), (309, 146)
