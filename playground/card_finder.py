@@ -143,8 +143,8 @@ def get_segments(lines, edges, sobelx, sobely, probabilistic):
                             for i in range(-border, border):
                                 for j in range(-border, border):
                                     grad = np.array([sobelx[y_i+j][x_i+i], sobely[y_i+j][x_i+i]])
-                                    if (edges[y_i+j][x_i+i] > 0 and
-                                        abs(np.dot(grad, np.array([dx, dy])))/np.linalg.norm(grad) < .7): 
+                                    if (edges[y_i+j][x_i+i] > 0):# and
+                                        #abs(np.dot(grad, np.array([dx, dy])))/np.linalg.norm(grad) < .7): 
                                         already_added = False
                                         for l in line_using[int(y_i+j)][int(x_i+i)]:
                                             if l != index and keep_seg[l]:
@@ -181,8 +181,8 @@ def get_segments(lines, edges, sobelx, sobely, probabilistic):
                                         for j in range(-border, border):
 
                                             grad = np.array([sobelx[y_i+j][x_i+i], sobely[y_i+j][x_i+i]])
-                                            if (edges[y_i+j][x_i+i] > 0 and
-                                                abs(np.dot(grad, np.array([dx, dy])))/np.linalg.norm(grad) < .7): 
+                                            if (edges[y_i+j][x_i+i] > 0):# and
+                                                #abs(np.dot(grad, np.array([dx, dy])))/np.linalg.norm(grad) < .7): 
                                                 direction = 1
                                                 break
                                         if direction == 1:
@@ -370,17 +370,37 @@ def reduce_quads(quads):
         angles = sorted(angles, key = lambda x: x[0])
         i = 0
         for a in angles:
-            new_quad[i] = q[angles[1]]
+            new_quad[i] = q[a[1]]
             i = i + 1
         return new_quad
 
     new_quads = []
     for q in quads:
         new_quads.append(sort_quad(q))
-    return new_quads
 
+    keep_quads = []
+    for q1 in new_quads:
+        keep_quads.append(True)
 
-def find_cards(img1):
+    for i in range(len(new_quads)):
+        q1 = new_quads[i]
+        if keep_quads[i]:
+            for j in range(i+1, len(new_quads)):
+                if keep_quads[j]:
+                    q2 = new_quads[j]
+                    keep_quads[j] = False
+                    for k in range(4):
+                        p1 = q1[k]
+                        p2 = q2[k]
+                        if (p1[0] - p2[0])**2 + (p1[1] - p2[1])**2 > 16:
+                            keep_quads[j] = True
+    final_quads = []
+    for q,k in zip(new_quads, keep_quads):
+        if k:
+            final_quads.append(q)
+    return final_quads
+
+def find_cards(img1, rho, theta, threshold, minLineLength, maxLineGap):
 
     # Do initial openCV processing
 
@@ -389,7 +409,10 @@ def find_cards(img1):
     sobely = cv2.Sobel(gray,cv2.CV_64F,0,1,ksize=5)
 
     edges = cv2.Canny(gray, 404, 156, apertureSize=3)
-    lines = cv2.HoughLinesP(edges,1,np.pi/360,20, minLineLength=10, maxLineGap=2)
+    lines = cv2.HoughLinesP(edges,rho, theta, threshold, minLineLength=minLineLength, maxLineGap=maxLineGap)
+    if lines is None:
+        return []
+
     print len(lines[0])
 
     intersections = []
@@ -398,17 +421,63 @@ def find_cards(img1):
     segments = get_segments(lines, edges, sobelx, sobely, True)
     intersections = get_intersections(segments)
     quads = get_quads(intersections)
+    quads = reduce_quads(quads)
 
-    return reduce_quads(quads)
+    return quads
 
+parameters = [[1, 90, 50, 10, 2],
+              [1, 180, 20, 10, 2],
+              [.5, 180, 30, 10, 2],
+              [.75, 720, 40, 10, 2],
+              [1, 720, 50, 10, 2],
+              [2, 90, 40, 10, 2],
+              [1, 360, 50, 10, 2]]
+
+
+def find_cards_with_parameter_setting(img1, i):
+    p = parameters[i]
+    return find_cards(img1, p[0], np.pi/p[1], p[2], p[3], p[4])
+
+
+"""
 card_file = '../data/input_images/'+str(sys.argv[1])+'.jpg'
-img1 = cv2.imread(card_file)
-quads = find_cards(img1)
 
+rho = 1
+theta = np.pi/360
+threshold = 30
+minLineLength = 10
+maxLineGap = 2
+img1 = cv2.imread(card_file)
+quads = []
+for i in range(len(parameters)):
+    quads.extend(find_cards_with_parameter_setting(img1, i))
+
+quads = reduce_quads(quads)
 
 for q in quads:
     arr = [np.array(q,'int32')]
     cv2.fillPoly(img1,arr,(0,0,100))
 
-cv2.imshow("w1", img1)
-cv.WaitKey(0)
+cv2.imwrite('../data/output_images/'+str(sys.argv[1])+'.jpg', img1)
+"""
+
+"""
+for rho in [.125, .25, .5, .75, 1, 2, 3, 4]:
+    for theta in [np.pi/720, np.pi/360, np.pi/180, np.pi/90, np.pi/45]:
+        for threshold in [10, 20, 30, 40, 50]:
+
+            img1 = cv2.imread(card_file)
+
+
+
+            quads = find_cards(img1, rho, theta, threshold, minLineLength, maxLineGap)
+
+
+            for q in quads:
+                arr = [np.array(q,'int32')]
+                cv2.fillPoly(img1,arr,(0,0,100))
+
+            cv2.imwrite('../data/output_images/'+str(sys.argv[1])+'_'+str(rho)+'_'+str(theta)+
+                                                                  '_'+str(threshold)+'_'+str(minLineLength)+
+                                                                  '_'+str(maxLineGap)+'.jpg', img1)
+"""
