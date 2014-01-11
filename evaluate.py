@@ -1,6 +1,7 @@
 import cv
 import cv2
 import json
+import numpy as np
 from cardidentifier import CardIdentifier
 
 def groundtruth(filename="data/ground_truth.txt"):
@@ -54,6 +55,10 @@ def generate_groundtruth(filename="data/_ground_truth.txt"):
 
     output.close()
 
+def attrs_from_card(card):
+    tokens = card.split(" ")
+    return tokens[:4]
+
 def points_from_card(card):
     tokens = card.split(" ")
     points = eval("[%s]" % ''.join(tokens[4:]))
@@ -62,16 +67,33 @@ def points_from_card(card):
 def main():
     c = CardIdentifier()
 
+    # Train
+    X = []
+    Y = []
+    for i, (filename, cards) in enumerate(groundtruth("data/ground_truth2.txt")):
+        image = cv2.imread(filename)
+        for card in cards:
+            pts = points_from_card(card)
+            cardimage = c.rectify(image, pts)
+
+            X.append(cardimage)
+            Y.append(attrs_from_card(card))
+
+    Y = np.array(Y)
+    c.fit(X, Y)
+
     cv2.namedWindow("w1", cv.CV_WINDOW_AUTOSIZE)
     for i, (filename, cards) in enumerate(groundtruth("data/ground_truth2.txt")):
         for card in cards:
-            print card
             pts = points_from_card(card)
             image = cv2.imread(filename)
-            skew = c.skew(image, pts)
+            image = c.rectify(image, pts)
+
             cv2.destroyWindow("w1")
-            cv2.imshow("w1", skew)
-            raw_input()
+            # cv2.imshow("w1", image)
+            print card
+            # print c.predict_color(image)
+            print c.predict_shape(image)
 
 if __name__ == "__main__":
     main()
