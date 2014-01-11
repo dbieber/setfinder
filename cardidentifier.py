@@ -10,7 +10,7 @@ class CardIdentifier():
     def predict(self, image):
         return []
 
-    def skew(self, image, pts):
+    def rectify(self, image, pts):
         CARD_DIMENSIONS = (250, 350)
         target_corners = np.float32([
             (0, 0),

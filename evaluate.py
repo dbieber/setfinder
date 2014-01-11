@@ -68,9 +68,9 @@ def main():
             print card
             pts = points_from_card(card)
             image = cv2.imread(filename)
-            skew = c.skew(image, pts)
+            image = c.rectify(image, pts)
             cv2.destroyWindow("w1")
-            cv2.imshow("w1", skew)
+            cv2.imshow("w1", image)
             raw_input()
 
 if __name__ == "__main__":
