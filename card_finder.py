@@ -411,7 +411,7 @@ def find_cards(img1, rho, theta, threshold, minLineLength, maxLineGap):
     sobely = cv2.Sobel(gray,cv2.CV_64F,0,1,ksize=5)
 
     gray = cv2.blur(gray, (3, 3))
-    edges = cv2.Canny(gray, 404, 156, apertureSize=3)
+    edges = cv2.Canny(gray, 404/3, 156/3, apertureSize=3)
     cv2.imshow('edges', edges)
     lines = cv2.HoughLinesP(edges,rho, theta, threshold, minLineLength=minLineLength, maxLineGap=maxLineGap)
     if lines is None:

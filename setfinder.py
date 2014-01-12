@@ -3,13 +3,14 @@
 
 # <codecell>
 
-%pylab inline
+#%pylab inline
 import cv
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
+#import matplotlib.pyplot as plt
+#import matplotlib.cm as cm
 import math
+import card_finder
 
 # <codecell>
 
@@ -20,140 +21,6 @@ NUMBER, SHADING, COLOR, SHAPE = 0, 1, 2, 3
 # Classifier
 
 # <codecell>
-
-def predict_number(card):
-    edges = card.edges()
-    height, width = edges.shape
-    x = width / 2
-    count = 0
-    waiting = 0
-    for y in range(5, height-5):
-        if edges[y][x] > 0 and waiting <= 0:
-            waiting = 10
-            count = count + 1
-        waiting = waiting - 1
-
-    count = count / 2
-    if count == 1:
-        card.number = "one"
-    elif count == 2:
-        card.number = "two"
-    elif count == 3:
-        card.number = "three"
-    else:
-        card.number = "fail"
-
-# <codecell>
-
-def predict_shading(card):
-    gray = card.gray()
-    edges = cv2.Canny(gray, 404/2, 156/2, apertureSize=3)
-    number = card.number
-    height, width = gray.shape
-
-    tc = (10,50) # topcenter row,col
-    white = np.mean(gray[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2])
-    
-    center = card.center()
-    
-    ws = 2 # window size
-    window = gray[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws]
-    avg_color = np.mean(window)
-    
-    ratio = avg_color / white
-    if ratio < .6:
-        card.shading = 'solid'
-    elif ratio < .95:
-        card.shading = 'striped'
-    else:
-        card.shading = 'empty'
-
-# <codecell>
-
-def predict_color(card, flag=False):
-    gray = card.gray()
-    edges = cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
-    image = card.hsv()
-
-    # Assumes rectified image
-    height, width = edges.shape
-    x = width / 2
-
-    # weird HSV
-
-    RED = np.array([2, 224, 189])
-    GREEN = np.array([70, 240, 105])
-    PURPLE = np.array([166, 207, 79])
-
-    # HSV
-    """
-    RED = np.array([5, 88, 74])
-    GREEN = np.array([141, 94, 41])
-    PURPLE = np.array([293, 81, 31])
-    """
-    colors = [RED, GREEN, PURPLE]
-    color_names = ["red", "green", "purple"]
-    color_counts = np.array([0, 0, 0])
-    for x in range(width/2-10, width/2+10, 4):
-
-        inside = False
-        ever_switch = False
-        beginning = True
-        beg_count = 0
-        beg_color = np.array([0, 0, 0])
-        color_counts_before = color_counts.copy()
-        for y in range(5, height-5):
-            if edges[y, x] > 0:
-                if beginning and beg_count != 0:
-                    beg_color /= beg_count
-                if flag:
-                    print 'beg_color', beg_color
-                beginning = False
-                inside = not inside
-                ever_switch = True
-
-            if beginning:
-                beg_count += 1
-                beg_color += image[y,x]
-
-
-            if inside:
-                color = np.array(image[y,x])
-                if flag:
-                    print color
-
-                if np.linalg.norm(color-beg_color, ord=1) < 60:
-                    continue
-                """
-                if color[0] <= 20 or 165 <= color[0]:
-                    color_counts[0] += 1
-                if 30 <= color[0] <= 90:
-                    color_counts[1] += 1
-                if 100 <= color[0] <= 165:
-                    color_counts[2] += 1
-                """
-                dists = []
-                for c in colors:
-                    d1 = abs(c[0]-color[0]) 
-                    d2 = abs(c[0]+180-color[0]) 
-                    dists.append(min(d1,d2))
-                if np.min(dists) < 25:
-                    color_counts[np.argmin(dists)] += 1
-        if not ever_switch or inside:
-            color_counts = color_counts_before
-
-    card.color = color_names[np.argmax(color_counts)]
-
-# <codecell>
-
-def predict_shape(card):
-    dists = card.dists()
-    
-    shape_distlists = [c.dists() for c in [diamondcard, squigglecard, rectanglecard]]
-    sims = [similarity(dists, distlist) for distlist in shape_distlists]
-
-    shapes = ["diamond", "squiggle", "rounded-rectangle"]
-    card.shape = shapes[np.argmax(sims)]
 
 # <headingcell level=1>
 
@@ -193,14 +60,16 @@ class Card():
     
     def center(self):
         if self.centerpt is None:
-            if self.number is not None:
-                predict_number(self)  # predicting number
-            number = 2 if self.number = "two" else 1
+            number = 2 if self.predict_number() == "two" else 1
             self.centerpt = find_center(self.edges(), number)
         return self.centerpt
     
+    def fail(self):
+        if 'fail' in self.labels():
+            return True
+
     def labels(self):
-        return [self.number, self.shading, self.color, self.shape]
+        return [self.predict_number(), self.predict_shading(), self.predict_color(), self.predict_shape()]
     
     def dists(self):
         if self.distlist is None:
@@ -209,6 +78,150 @@ class Card():
             dists = dists_to_edges(canny, center)
             self.distlist = dists / np.linalg.norm(dists)
         return self.distlist
+
+    def predict_number(self):
+        if self.number is None:
+            edges = self.edges()
+            height, width = edges.shape
+            x = width / 2
+            count = 0
+            waiting = 0
+            for y in range(5, height-5):
+                if edges[y][x] > 0 and waiting <= 0:
+                    waiting = 10
+                    count = count + 1
+                waiting = waiting - 1
+
+            count = count / 2
+            if count == 1:
+                self.number = "one"
+            elif count == 2:
+                self.number = "two"
+            elif count == 3:
+                self.number = "three"
+            else:
+                self.number = "fail"
+        return self.number
+
+    # <codecell>
+
+    def predict_shading(self):
+        if self.shading is None:
+            gray = self.gray()
+            edges = cv2.Canny(gray, 404/2, 156/2, apertureSize=3)
+            number = self.number
+            height, width = gray.shape
+
+            tc = (10,50) # topcenter row,col
+            white = np.mean(gray[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2])
+            
+            center = self.center()
+            
+            ws = 2 # window size
+            window = gray[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws]
+            avg_color = np.mean(window)
+            
+            ratio = avg_color / white
+            if ratio < .6:
+                self.shading = 'solid'
+            elif ratio < .95:
+                self.shading = 'striped'
+            else:
+                self.shading = 'empty'
+        return self.shading
+
+    # <codecell>
+
+    def predict_color(self, flag=False):
+        if self.color is None:
+            gray = self.gray()
+            edges = cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
+            image = self.hsv()
+
+            # Assumes rectified image
+            height, width = edges.shape
+            x = width / 2
+
+            # weird HSV
+
+            RED = np.array([2, 224, 189])
+            GREEN = np.array([70, 240, 105])
+            PURPLE = np.array([166, 207, 79])
+
+            # HSV
+            """
+            RED = np.array([5, 88, 74])
+            GREEN = np.array([141, 94, 41])
+            PURPLE = np.array([293, 81, 31])
+            """
+            colors = [RED, GREEN, PURPLE]
+            color_names = ["red", "green", "purple"]
+            color_counts = np.array([0, 0, 0])
+            for x in range(width/2-10, width/2+10, 4):
+
+                inside = False
+                ever_switch = False
+                beginning = True
+                beg_count = 0
+                beg_color = np.array([0, 0, 0])
+                color_counts_before = color_counts.copy()
+                for y in range(5, height-5):
+                    if edges[y, x] > 0:
+                        if beginning and beg_count != 0:
+                            beg_color /= beg_count
+                        if flag:
+                            print 'beg_color', beg_color
+                        beginning = False
+                        inside = not inside
+                        ever_switch = True
+
+                    if beginning:
+                        beg_count += 1
+                        beg_color += image[y,x]
+
+
+                    if inside:
+                        color = np.array(image[y,x])
+                        if flag:
+                            print color
+
+                        if np.linalg.norm(color-beg_color, ord=1) < 60:
+                            continue
+                        """
+                        if color[0] <= 20 or 165 <= color[0]:
+                            color_counts[0] += 1
+                        if 30 <= color[0] <= 90:
+                            color_counts[1] += 1
+                        if 100 <= color[0] <= 165:
+                            color_counts[2] += 1
+                        """
+                        dists = []
+                        for c in colors:
+                            d1 = abs(c[0]-color[0]) 
+                            d2 = abs(c[0]+180-color[0]) 
+                            dists.append(min(d1,d2))
+                        if np.min(dists) < 25:
+                            color_counts[np.argmin(dists)] += 1
+                if not ever_switch or inside:
+                    color_counts = color_counts_before
+
+            self.color = color_names[np.argmax(color_counts)]
+        return self.color
+
+    # <codecell>
+
+    def predict_shape(self):
+        if self.shape is None:
+            dists = self.dists()
+            
+            shape_distlists = [c.dists() for c in [diamondcard, squigglecard, rectanglecard]]
+            sims = [similarity(dists, distlist) for distlist in shape_distlists]
+
+            shapes = ["diamond", "squiggle", "rounded-rectangle"]
+            self.shape = shapes[np.argmax(sims)]
+        return self.shape
+
+
 
 # <codecell>
 
@@ -236,7 +249,7 @@ def distance_to_edge(canny, pt, direction):
     dist = 0.0
     point = pt  # x,y
     while dist < 50 and not is_edge_at(canny, point):
-        point = (int(pt[0] + dist * cos(direction)), int(pt[1] + dist * sin(direction)))
+        point = (int(pt[0] + dist * np.cos(direction)), int(pt[1] + dist * np.sin(direction)))
         dist += 1
     return dist
 
@@ -256,7 +269,7 @@ def dists_to_edges(canny, point):
 def is_edge_at(canny, point):
     # point is x,y
     window = canny[point[1]-1:point[1]+1,point[0]-1:point[0]+1]
-    return sum(window) > 0
+    return np.sum(window) > 0
 
 # <codecell>
 
@@ -334,7 +347,6 @@ def gen_data(filename):
 
 # <codecell>
 
-trainX, trainY = gen_data("data/training.txt")
 
 # <codecell>
 
@@ -355,72 +367,132 @@ def exampleofcard(feature=SHADING, value="empty"):
 
 # <codecell>
 
-diamondcard = exampleofcard(SHAPE, "diamond")
-rectanglecard = exampleofcard(SHAPE, "rounded-rectangle")
-squigglecard = exampleofcard(SHAPE, "squiggle")
-
 # <headingcell level=1>
 
 # Test
 
 # <codecell>
 
-X, Y = gen_data("data/training.txt")
+
+def test_cards():
+    X, Y = gen_data("data/training.txt")
+
+    # <codecell>
+
+    counts = [0] * 5
+    for card, labels in zip(X, Y):
+        card.predict_number()
+        card.predict_shading()
+        card.predict_color()
+        card.predict_shape()
+        
+        numberok = card.number == labels[NUMBER]
+        shadingok = card.shading == labels[SHADING]
+        colorok = card.color == labels[COLOR]
+        shapeok = card.shape == labels[SHAPE]
+        
+        if not shadingok:
+            gray = card.gray().copy()
+            cv2.circle(gray, card.center(), 1, 255)
+            #show(gray)
+        
+        counts[NUMBER] += numberok
+        counts[SHADING] += shadingok
+        counts[COLOR] += colorok
+        counts[SHAPE] += shapeok
+        counts[4] += numberok and shadingok and colorok and shapeok
+    #     print "Predict: ", ' '.join(str(x) for x in card.labels())
+    #     print "Actual:  ", ' '.join(labels)
+    #     print
+        
+    print counts, len(X)
 
 # <codecell>
 
-counts = [0] * 5
-for card, labels in zip(X, Y):
-    predict_number(card)
-    predict_shading(card)
-    predict_color(card)
-    predict_shape(card)
+#def show(image):
+#    plt.imshow(image, cmap=cm.Greys_r)
+#    plt.show()
+
+# <codecell>
+
+def main():
+
+    print card_finder
+    print 'hit any key to take a picture'
+    vc = cv2.VideoCapture(0)
+
+    if vc.isOpened(): # try to get the first frame
+        rval, frame = vc.read()
+    else:
+        rval = False
+
+    while rval:
+        frame = cv2.resize(frame, (640,480))
+        quads = []
+        for i in range(0, 3):
+            quads.extend(card_finder.find_cards_with_parameter_setting(frame, i))
+
+        quads = card_finder.reduce_quads(quads)
+        cards = []
+        for q in quads:
+            card = Card(rectify(frame, q))
+            cards.append()
+        
+        print set(' '.join(c.labels()) for c in cards)
+
+        image = mark_quads(frame, quads)
+        cv2.imshow('win', image)
+
+        rval, frame = vc.read()
+        key = cv2.waitKey(1)
+        if key == 27: # exit on ESC
+            break
+
+
+
+"""
+ A card_list should contain at least four entries for every card.
+ Entry 1) Color
+ Entry 2) Shape
+ Entry 3) Number
+ Entry 4) Shading
+ There can be more entries, in fact we encourage using the fifth
+ entry to be the index into the quad array
+"""
+def calc_sets(card_list):
+    for i in range(len(card_list)):
+        for j in range(i+1, len(card_list)):
+            for k in range(j+1, len(card_list)):
+                for l in range(4):
+                    if ((card_list[i][l] == card_list[j][l] == card_list[k][l]) or
+                        (card_list[i][l] != card_list[j][l] and 
+                        card_list[j][l] != card_list[k][l] and
+                        card_list[k][l] != card_list[i][l])):
+                        return i,j,k
+    return None
+
+"""
+cards is an array of three indicies into the quads array
+"""
+def mark_set(image, cards, quads):
+    for c in cards:
+        arr = [np.array(quads[c],'int32')]
+        cv2.polylines(image, arr, True, (0,0,100), thickness=3)
+
+    return image
+
+def mark_quads(image, quads):
+    for q in quads:
+        arr = [np.array(q,'int32')]
+        cv2.fillPoly(image,arr,(0,0,100))
+    return image
     
-    numberok = card.number == labels[NUMBER]
-    shadingok = card.shading == labels[SHADING]
-    colorok = card.color == labels[COLOR]
-    shapeok = card.shape == labels[SHAPE]
-    
-    if not shadingok:
-        gray = card.gray().copy()
-        cv2.circle(gray, gray.center(), 1, 255)
-        show(gray)
-    
-    counts[NUMBER] += numberok
-    counts[SHADING] += shadingok
-    counts[COLOR] += colorok
-    counts[SHAPE] += shapeok
-    counts[4] += numberok and shadingok and colorok and shapeok
-#     print "Predict: ", ' '.join(str(x) for x in card.labels())
-#     print "Actual:  ", ' '.join(labels)
-#     print
-    
-print counts, len(X)
 
-# <codecell>
+trainX, trainY = gen_data("data/training.txt")
+diamondcard = exampleofcard(SHAPE, "diamond")
+rectanglecard = exampleofcard(SHAPE, "rounded-rectangle")
+squigglecard = exampleofcard(SHAPE, "squiggle")
 
-def show(image):
-    plt.imshow(image, cmap=cm.Greys_r)
-    plt.show()
-
-# <codecell>
-
-
-# <codecell>
-
-
-# <codecell>
-
-
-# <codecell>
-
-
-# <codecell>
-
-
-# <codecell>
-
-
-# <codecell>
+main()
 
 
