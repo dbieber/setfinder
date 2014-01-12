@@ -6,10 +6,12 @@ from sets import Set
 import copy
 import sys
 
+"""
 cv2.namedWindow("w1", cv.CV_WINDOW_AUTOSIZE)
 
 card_file = '../data/input_images/'+str(sys.argv[1])+'.jpg'
 img1 = cv2.imread(card_file)
+"""
 
 
 def make_segments(rho, theta, diag):
@@ -408,12 +410,12 @@ def find_cards(img1, rho, theta, threshold, minLineLength, maxLineGap):
     sobelx = cv2.Sobel(gray,cv2.CV_64F,1,0,ksize=5)
     sobely = cv2.Sobel(gray,cv2.CV_64F,0,1,ksize=5)
 
+    gray = cv2.blur(gray, (3, 3))
     edges = cv2.Canny(gray, 404, 156, apertureSize=3)
+    cv2.imshow('edges', edges)
     lines = cv2.HoughLinesP(edges,rho, theta, threshold, minLineLength=minLineLength, maxLineGap=maxLineGap)
     if lines is None:
         return []
-
-    print len(lines[0])
 
     intersections = []
 
@@ -435,9 +437,9 @@ parameters = [[1, 90, 50, 10, 2],
 
 
 def find_cards_with_parameter_setting(img1, i):
+
     p = parameters[i]
     return find_cards(img1, p[0], np.pi/p[1], p[2], p[3], p[4])
-
 
 """
 card_file = '../data/input_images/'+str(sys.argv[1])+'.jpg'
@@ -449,7 +451,7 @@ minLineLength = 10
 maxLineGap = 2
 img1 = cv2.imread(card_file)
 quads = []
-for i in range(len(parameters)):
+for i in range(0, len(parameters)):
     quads.extend(find_cards_with_parameter_setting(img1, i))
 
 quads = reduce_quads(quads)
