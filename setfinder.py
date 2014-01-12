@@ -42,6 +42,10 @@ class Card():
         self.hsvimage = None
         self.centerpt = None
         self.distlist = None
+
+    def opencv_show(self):
+        cv2.destroyWindow('card_window')
+        cv2.imshow('card_window', self.image)
         
     def gray(self):
         if self.grayimage is None:
@@ -426,6 +430,7 @@ def main():
     else:
         rval = False
 
+    looking_at = 0
     while rval:
         frame = cv2.resize(frame, (640,480))
         quads = []
@@ -436,7 +441,8 @@ def main():
         cards = []
         for q in quads:
             card = Card(rectify(frame, q))
-            cards.append()
+            if not card.fail():
+                cards.append(card)
         
         print set(' '.join(c.labels()) for c in cards)
 
@@ -444,9 +450,31 @@ def main():
         cv2.imshow('win', image)
 
         rval, frame = vc.read()
+        looking_at = 0
+
         key = cv2.waitKey(1)
         if key == 27: # exit on ESC
             break
+        if len(cards) > 0:
+            key = cv2.waitKey(0)
+            while key != ord('t'):
+                if key == ord('p'):
+                    looking_at -= 1
+                    if looking_at < 0:
+                        looking_at = len(cards) - 1
+                    cards[looking_at].opencv_show()
+                    print ' '.join(cards[looking_at].labels())
+
+                if key == ord('n'):
+                    looking_at += 1
+                    if looking_at >= len(cards):
+                        looking_at = 0
+                    cards[looking_at].opencv_show()
+                    print ' '.join(cards[looking_at].labels())
+
+                if key == 27: # exit on ESC
+                    break
+                key = cv2.waitKey(0)
 
 
 
