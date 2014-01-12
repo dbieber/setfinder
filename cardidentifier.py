@@ -100,16 +100,87 @@ class CardIdentifier():
 
         count = count / 2
         if count == 1:
-            return 'one'
+            return "one"
         if count == 2:
-            return 'two'
+            return "two"
         if count == 3:
-            return 'three'
-        return 'fail'
+            return "three"
+        return "fail"
 
     def predict_shading(self, image):
-        bag = self.bag_from(image)
-        return self.shading_clf.predict(bag)
+        gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+        # Assumes rectified image
+        height, width = edges.shape
+        x = width / 2
+
+        # weird HSV
+
+
+        # HSV
+        """
+        RED = np.array([5, 88, 74])
+        GREEN = np.array([141, 94, 41])
+        PURPLE = np.array([293, 81, 31])
+        """
+        shading_names = ["solid", "empty", "striped"]
+        shading_counts = np.array([0, 0, 0])
+        for x in range(width/2-10, width/2+10, 4):
+
+            inside = False
+            ever_switch = False
+            beginning = True
+
+            beg_count = 0
+            beg_color = np.array([0, 0, 0])
+
+            card_count = 0
+            card_color = np.array([0, 0, 0])
+
+            avg_color = np.array([0, 0, 0])
+            countdown = 5
+            switches = 0
+            for y in range(5, height-5):
+                if edges[y, x] > 0:
+                    switches += 1
+                    if beginning and beg_count != 0:
+                        beg_color /= beg_count
+                    beginning = False
+                    inside = not inside
+                    ever_switch = True
+
+                if switches > 3:
+                    break
+
+                color = np.array(image[y,x])
+
+                if beginning:
+                    beg_count += 1
+                    beg_color += image[y,x]
+                else:
+                    if countdown == 4:
+                        if inside:
+                            card_color = color
+                    elif countdown <= 0:
+
+                        dists = []
+                        colors = [card_color, beg_color]
+                        for c in colors:
+                            dists.append(np.linalg.norm(c - color, ord=1))
+                            
+                        if np.min(dists) < 40:
+                            shading_counts[np.argmin(dists)] += 1
+                    print color
+
+                    countdown -= 1
+
+        min_count = min(shading_counts)
+        if min_count > 0 and max(shading_counts) / min_count  < 2:
+            return shading_names[2], shading_counts
+
+        return shading_names[np.argmax(shading_counts)], shading_counts
 
     def predict_shape(self, image):
         bag = self.bag_from(image)
@@ -128,7 +199,7 @@ class CardIdentifier():
 
         RED = np.array([2, 224, 189])
         GREEN = np.array([70, 240, 105])
-        PURPLE = np.array([146, 207, 79])
+        PURPLE = np.array([166, 207, 79])
 
         # HSV
         """
@@ -139,19 +210,36 @@ class CardIdentifier():
         colors = [RED, GREEN, PURPLE]
         color_names = ["red", "green", "purple"]
         color_counts = np.array([0, 0, 0])
-        for x in range(width/2-10, width/2+10):
+        for x in range(width/2-10, width/2+10, 4):
+
             inside = False
             ever_switch = False
+            beginning = True
+            beg_count = 0
+            beg_color = np.array([0, 0, 0])
             color_counts_before = color_counts.copy()
             for y in range(5, height-5):
                 if edges[y, x] > 0:
+                    if beginning and beg_count != 0:
+                        beg_color /= beg_count
+                    if flag:
+                        print 'beg_color', beg_color
+                    beginning = False
                     inside = not inside
                     ever_switch = True
+
+                if beginning:
+                    beg_count += 1
+                    beg_color += image[y,x]
+
 
                 if inside:
                     color = np.array(image[y,x])
                     if flag:
                         print color
+
+                    if np.linalg.norm(color-beg_color, ord=1) < 60:
+                        continue
                     """
                     if color[0] <= 20 or 165 <= color[0]:
                         color_counts[0] += 1
@@ -164,7 +252,7 @@ class CardIdentifier():
                     for c in colors:
                         d1 = abs(c[0]-color[0]) 
                         d2 = abs(c[0]+180-color[0]) 
-                        dists.append(d1)
+                        dists.append(min(d1,d2))
                     if np.min(dists) < 25:
                         color_counts[np.argmin(dists)] += 1
             if not ever_switch or inside:

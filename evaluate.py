@@ -103,7 +103,7 @@ def main():
     cv2.namedWindow("w1", cv.CV_WINDOW_AUTOSIZE)
     bad_color_count = 0
     total = 0
-    for i, (filename, cards) in enumerate(groundtruth("data/training.txt")):
+    for i, (filename, cards) in enumerate(groundtruth("data/ground_truth.txt")):
         for card in cards:
             pts = points_from_card(card)
             image = cv2.imread(filename)
@@ -115,15 +115,23 @@ def main():
             cv2.destroyWindow("w1")
             cv2.imshow("w1", image)
             #print card
-            #print c.predict_number(image),
+            number = c.predict_number(image),
             color = c.predict_color(image)
+            shading = c.predict_shading(image)
             #print color
             #print c.predict_shading(image)[0],
             #print c.predict_shape(image)[0]
-            if card.find(color[0]) == -1:
+            if card.find(color[0]) == -1 or card.find(number[0]) == -1 or card.find(shading[0]) == -1:
                 print card
-                print color
-                color = c.predict_color(image, True)
+                print color[0]
+                print number[0]
+                print shading
+                gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+                edges = cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
+                #cv2.destroyWindow("w2")
+                #cv2.imshow("w2", edges)
+
+                #color = c.predict_color(image, True)
                 cv2.waitKey(0)
                 bad_color_count = bad_color_count + 1
             total = total + 1
