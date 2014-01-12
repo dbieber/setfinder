@@ -3,10 +3,10 @@ import cv2
 import math
 import numpy as np
 import random
-import scipy.spatial
-from sklearn.cluster import KMeans
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.svm import SVC
+#import scipy.spatial
+#from sklearn.cluster import KMeans
+#from sklearn.neighbors import KNeighborsClassifier
+#from sklearn.svm import SVC
 
 SIFT_extractor = cv2.DescriptorExtractor_create("SIFT")
 
@@ -86,8 +86,26 @@ class CardIdentifier():
         self.shape_clf.fit(bags, Y[:,SHAPE])
 
     def predict_number(self, image):
-        bag = self.bag_from(image)
-        return self.number_clf.predict(bag)
+        gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray, 404/3, 156/3, apertureSize=3)
+        height, width = edges.shape
+        x = width / 2
+        count = 0
+        waiting = 0
+        for y in range(5, height-5):
+            if edges[y][x] > 0 and waiting <= 0:
+                waiting = 10
+                count = count + 1
+            waiting = waiting - 1
+
+        count = count / 2
+        if count == 1:
+            return 'one'
+        if count == 2:
+            return 'two'
+        if count == 3:
+            return 'three'
+        return 'fail'
 
     def predict_shading(self, image):
         bag = self.bag_from(image)
@@ -98,29 +116,54 @@ class CardIdentifier():
         return self.shape_clf.predict(bag)
 
     def predict_color(self, image):
+        gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray, 404/3, 156/3, apertureSize=3)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
         # Assumes rectified image
-        y,x,depth = image.shape
+        height, width = edges.shape
+        x = width / 2
+        inside = False
 
 
-        BLACK = [0,0,0]
-        WHITE = [255,255,255]
-        CARDWHITE = [201,194,178]
-        RED = [208,38,31]
-        GREEN = [0,137,66]
-        PURPLE = [69,24,70]
-        colors = [BLACK, WHITE, CARDWHITE, RED, GREEN, PURPLE]
-        color_names = ["BLACK", "WHITE", "CARDWHITE", "RED", "GREEN", "PURPLE"]
-        color_counts = [0] * len(colors) # black,white,cardwhite, orange, green, purple
-        for i in xrange(y):
-            for j in xrange(x):
-                color = list(reversed(image[i,j,:]))
-                dists = scipy.spatial.distance.cdist([color], colors)
-                if np.min(dists) < 50:
-                    color_counts[np.argmin(dists)] += 1
+        # weird HSV
 
-        color_counts[0] = 0
-        color_counts[1] = 0
-        color_counts[2] = 0
+        RED = np.array([2, 224, 189])
+        GREEN = np.array([70, 240, 105])
+        PURPLE = np.array([146, 207, 79])
+
+        # HSV
+        """
+        RED = np.array([5, 88, 74])
+        GREEN = np.array([141, 94, 41])
+        PURPLE = np.array([293, 81, 31])
+        """
+        colors = [RED, GREEN, PURPLE]
+        color_names = ["red", "green", "purple"]
+        color_counts = [0, 0, 0]
+        for x in [width/2-5, width/2, width/2+5]:
+            for y in range(5, height-5):
+                if edges[y, x] > 0:
+                    inside = not inside
+
+                if inside:
+                    color = np.array(image[y,x])
+                    if color[0] <= 5 or 177 <= color[0]:
+                        color_counts[0] += 1
+                    if 40 <= color[0] <= 70:
+                        color_counts[1] += 1
+                    if 120 <= color[0] <= 70:
+                        color_counts[2] += 1
+                    """
+                    dists = []
+                    for c in colors:
+                        d1 = abs(c[0]-color[0]) 
+                        d2 = abs(c[0]+180-color[0]) 
+                        dists.append(min(d1, d2))
+                    if np.min(dists) < 25:
+                        color_counts[np.argmin(dists)] += 1
+                    """
+
         return color_names[np.argmax(color_counts)]
 
     def predict(self, image):

@@ -77,6 +77,7 @@ def points_from_card(card):
 def main():
     c = CardIdentifier()
 
+    """
     # Train
     X = []
     Y = []
@@ -97,8 +98,10 @@ def main():
 
     Y = np.array(Y)
     c.fit(X, Y)
+    """
 
     cv2.namedWindow("w1", cv.CV_WINDOW_AUTOSIZE)
+    bad_color_count = 0
     for i, (filename, cards) in enumerate(groundtruth("data/ground_truth.txt")):
         for card in cards:
             pts = points_from_card(card)
@@ -111,11 +114,14 @@ def main():
             cv2.destroyWindow("w1")
             cv2.imshow("w1", image)
             print card
-            # print c.predict_color(image)
-            print c.predict_number(image)[0],
-            print c.predict_shading(image)[0],
-            print c.predict_shape(image)[0]
-            raw_input()
+            print c.predict_number(image),
+            color = c.predict_color(image)
+            print color
+            #print c.predict_shading(image)[0],
+            #print c.predict_shape(image)[0]
+            if card.find(color) == -1:
+                bad_color_count = bad_color_count + 1
+    print bad_color_count
 
 if __name__ == "__main__":
     main()
