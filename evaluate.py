@@ -29,7 +29,7 @@ def generate_groundtruth(filename="data/_ground_truth.txt"):
     cv.NamedWindow("window")
     cv.SetMouseCallback("window", on_mouse)
 
-    for i, (filename, cards) in enumerate(groundtruth()):
+    for i, (filename, cards) in enumerate(groundtruth("data/test.txt")):
         current_image = cv.LoadImage(filename)
         cv.ShowImage("window", current_image)
 
@@ -78,28 +78,28 @@ def main():
     c = CardIdentifier()
 
     # Train
-    X = []
-    Y = []
-    for i, (filename, cards) in enumerate(groundtruth("data/ground_truth.txt")):
-        image = cv2.imread(filename)
-        for j, card in enumerate(cards):
-            if j == 10:
-                break
+    # X = []
+    # Y = []
+    # for i, (filename, cards) in enumerate(groundtruth("data/training.txt")):
+    #     image = cv2.imread(filename)
+    #     for j, card in enumerate(cards):
+    #         if j == 10:
+    #             break
 
-            pts = points_from_card(card)
-            if not pts:
-                continue
+    #         pts = points_from_card(card)
+    #         if not pts:
+    #             continue
 
-            cardimage = c.rectify(image, pts)
+    #         cardimage = c.rectify(image, pts)
 
-            X.append(cardimage)
-            Y.append(attrs_from_card(card))
+    #         X.append(cardimage)
+    #         Y.append(attrs_from_card(card))
 
-    Y = np.array(Y)
-    c.fit(X, Y)
+    # Y = np.array(Y)
+    # c.fit(X, Y)
 
     cv2.namedWindow("w1", cv.CV_WINDOW_AUTOSIZE)
-    for i, (filename, cards) in enumerate(groundtruth("data/ground_truth.txt")):
+    for i, (filename, cards) in enumerate(groundtruth("data/test.txt")):
         for card in cards:
             pts = points_from_card(card)
             image = cv2.imread(filename)
@@ -112,9 +112,9 @@ def main():
             cv2.imshow("w1", image)
             print card
             # print c.predict_color(image)
-            print c.predict_number(image)[0],
-            print c.predict_shading(image)[0],
-            print c.predict_shape(image)[0]
+            # print c.predict_number(image)[0],
+            # print c.predict_shading(image)[0],
+            # print c.predict_shape(image)[0]
             raw_input()
 
 if __name__ == "__main__":
