@@ -31,46 +31,46 @@ NUMBER, SHADING, COLOR, SHAPE = 0, 1, 2, 3
 class Card():
     def __init__(self, image):
         self.image = image  # already rectified
-        
+
         self.number = None
         self.shading = None
         self.color = None
         self.shape = None
-        
+
         self.grayimage = None
         self.edgesimage = None
         self.hsvimage = None
         self.centerpt = None
         self.distlist = None
-        
+
     def gray(self):
         if self.grayimage is None:
             self.grayimage = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
         return self.grayimage
-    
+
     def edges(self):
         if self.edgesimage is None:
             self.edgesimage = cv2.Canny(self.gray(), 404/3, 156/3, apertureSize=3)
         return self.edgesimage
-    
+
     def hsv(self):
         if self.hsvimage is None:
             self.hsvimage = cv2.cvtColor(self.image, cv2.COLOR_BGR2HSV)
         return self.hsvimage
-    
+
     def center(self):
         if self.centerpt is None:
             number = 2 if self.predict_number() == "two" else 1
             self.centerpt = find_center(self.edges(), number)
         return self.centerpt
-    
+
     def fail(self):
         if 'fail' in self.labels():
             return True
 
     def labels(self):
         return [self.predict_number(), self.predict_shading(), self.predict_color(), self.predict_shape()]
-    
+
     def dists(self):
         if self.distlist is None:
             canny = self.edges()
@@ -114,13 +114,13 @@ class Card():
 
             tc = (10,50) # topcenter row,col
             white = np.mean(gray[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2])
-            
+
             center = self.center()
-            
+
             ws = 2 # window size
             window = gray[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws]
             avg_color = np.mean(window)
-            
+
             ratio = avg_color / white
             if ratio < .6:
                 self.shading = 'solid'
@@ -197,8 +197,8 @@ class Card():
                         """
                         dists = []
                         for c in colors:
-                            d1 = abs(c[0]-color[0]) 
-                            d2 = abs(c[0]+180-color[0]) 
+                            d1 = abs(c[0]-color[0])
+                            d2 = abs(c[0]+180-color[0])
                             dists.append(min(d1,d2))
                         if np.min(dists) < 25:
                             color_counts[np.argmin(dists)] += 1
@@ -213,7 +213,7 @@ class Card():
     def predict_shape(self):
         if self.shape is None:
             dists = self.dists()
-            
+
             shape_distlists = [c.dists() for c in [diamondcard, squigglecard, rectanglecard]]
             sims = [similarity(dists, distlist) for distlist in shape_distlists]
 
@@ -230,16 +230,16 @@ def find_center(canny, number=1):
     center = (50,70)
     if number == 2:
         center = (50,48)
-        
+
     for i in xrange(2):
         distRight = distance_to_edge(canny, center, 0)
         distLeft = distance_to_edge(canny, center, np.pi)
         center = (center[0] + (distRight - distLeft) / 2, center[1])
-        
+
         distUp = distance_to_edge(canny, center, np.pi/2)
         distDown = distance_to_edge(canny, center, 3*np.pi/2)
         center = (center[0], center[1] + (distUp - distDown) / 2)
-        
+
     center = (int(center[0]), int(center[1]))
     return center
 
@@ -332,12 +332,12 @@ def gen_data(filename):
             pts = points_from_card(card)
             if not pts:
                 continue
-    
+
             cardimage = rectify(image, pts)
-    
+
             X.append(Card(cardimage))
             Y.append(attrs_from_card(card))
-    
+
     Y = np.array(Y)
     return X, Y
 
@@ -355,7 +355,7 @@ def exampleofcard(feature=SHADING, value="empty"):
     ANY = "*"
     desiredValues = ["one","empty",ANY,"rounded-rectangle"]
     desiredValues[feature] = value
-    
+
     for card, labels in zip(trainX, trainY):
         ok = True
         for attr in xrange(4):
@@ -385,17 +385,17 @@ def test_cards():
         card.predict_shading()
         card.predict_color()
         card.predict_shape()
-        
+
         numberok = card.number == labels[NUMBER]
         shadingok = card.shading == labels[SHADING]
         colorok = card.color == labels[COLOR]
         shapeok = card.shape == labels[SHAPE]
-        
+
         if not shadingok:
             gray = card.gray().copy()
             cv2.circle(gray, card.center(), 1, 255)
             #show(gray)
-        
+
         counts[NUMBER] += numberok
         counts[SHADING] += shadingok
         counts[COLOR] += colorok
@@ -404,7 +404,7 @@ def test_cards():
     #     print "Predict: ", ' '.join(str(x) for x in card.labels())
     #     print "Actual:  ", ' '.join(labels)
     #     print
-        
+
     print counts, len(X)
 
 # <codecell>
@@ -420,13 +420,24 @@ def main():
     print card_finder
     print 'hit any key to take a picture'
     vc = cv2.VideoCapture(0)
+    cv2.namedWindow('win', cv.CV_WINDOW_AUTOSIZE)
 
     if vc.isOpened(): # try to get the first frame
         rval, frame = vc.read()
     else:
         rval = False
 
-    while rval:
+    while True:
+        rval, frame = vc.read()
+        print frame
+
+        key = cv2.waitKey(10)
+        if key == 27: # exit on ESC
+            break
+
+        if frame is None:
+            continue
+
         frame = cv2.resize(frame, (640,480))
         quads = []
         for i in range(0, 3):
@@ -437,16 +448,12 @@ def main():
         for q in quads:
             card = Card(rectify(frame, q))
             cards.append()
-        
+
         print set(' '.join(c.labels()) for c in cards)
 
         image = mark_quads(frame, quads)
         cv2.imshow('win', image)
 
-        rval, frame = vc.read()
-        key = cv2.waitKey(1)
-        if key == 27: # exit on ESC
-            break
 
 
 
@@ -465,7 +472,7 @@ def calc_sets(card_list):
             for k in range(j+1, len(card_list)):
                 for l in range(4):
                     if ((card_list[i][l] == card_list[j][l] == card_list[k][l]) or
-                        (card_list[i][l] != card_list[j][l] and 
+                        (card_list[i][l] != card_list[j][l] and
                         card_list[j][l] != card_list[k][l] and
                         card_list[k][l] != card_list[i][l])):
                         return i,j,k
@@ -486,7 +493,7 @@ def mark_quads(image, quads):
         arr = [np.array(q,'int32')]
         cv2.fillPoly(image,arr,(0,0,100))
     return image
-    
+
 
 trainX, trainY = gen_data("data/training.txt")
 diamondcard = exampleofcard(SHAPE, "diamond")
