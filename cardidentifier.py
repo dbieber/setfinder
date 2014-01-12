@@ -109,22 +109,15 @@ class CardIdentifier():
 
     def predict_shading(self, image):
         gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
-        edges = cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
+        #edges = cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        image = cv2.blur(image, (3,3))
 
         # Assumes rectified image
-        height, width = edges.shape
+        height, width, depth = image.shape
         x = width / 2
 
         # weird HSV
-
-
-        # HSV
-        """
-        RED = np.array([5, 88, 74])
-        GREEN = np.array([141, 94, 41])
-        PURPLE = np.array([293, 81, 31])
-        """
         shading_names = ["solid", "empty", "striped"]
         shading_counts = np.array([0, 0, 0])
         for x in range(width/2-10, width/2+10, 4):
@@ -142,7 +135,39 @@ class CardIdentifier():
             avg_color = np.array([0, 0, 0])
             countdown = 5
             switches = 0
+
+            inside_long = 0
+
+            first_sat = int(image[5, x, 1])
+            second_sat = 0
+            second_hue = 0
+            countdown = 0
+            threshold1 = False
+
             for y in range(5, height-5):
+                sat = int(image[y, x, 1])
+                if not threshold1 and abs(sat - first_sat) > 5:
+                    threshold1 = True
+                    countdown = 10
+
+                if sat > second_sat:
+                    second_hue = int(image[y,x,0])
+                    second_sat = sat
+
+                if threshold1:
+                    print first_sat, second_sat, sat
+                    countdown -= 1
+                    if countdown == 0:
+                        if abs(sat - second_sat) < 20:
+                            shading_counts[0] += 1
+                        elif abs(int(image[y,x,0]) - second_hue) < 25:
+                            shading_counts[2] += 1
+                        else:
+                            shading_counts[1] += 1
+                        break
+                        
+
+                """
                 if edges[y, x] > 0:
                     switches += 1
                     if beginning and beg_count != 0:
@@ -151,8 +176,11 @@ class CardIdentifier():
                     inside = not inside
                     ever_switch = True
 
-                if switches > 3:
+                if switches > 3 or (switches == 2 and inside_long > 10):
                     break
+
+                if inside:
+                    inside_long += 1
 
                 color = np.array(image[y,x])
 
@@ -161,24 +189,27 @@ class CardIdentifier():
                     beg_color += image[y,x]
                 else:
                     if countdown == 4:
-                        if inside:
-                            card_color = color
+                        #card_color = color
+                        mixed_color = beg_color.copy()
+                        mixed_color[0] = card_color[0]
                     elif countdown <= 0:
 
                         dists = []
-                        colors = [card_color, beg_color]
+                        colors = [card_color, beg_color, mixed_color]
                         for c in colors:
                             dists.append(np.linalg.norm(c - color, ord=1))
                             
                         if np.min(dists) < 40:
                             shading_counts[np.argmin(dists)] += 1
-                    print color
+                    #print color
 
                     countdown -= 1
+                """
 
-        min_count = min(shading_counts)
-        if min_count > 0 and max(shading_counts) / min_count  < 2:
-            return shading_names[2], shading_counts
+        #print 'card_color', card_color, 'beg_color', beg_color
+        #min_count = min(shading_counts)
+        #if min_count > 0 and max(shading_counts) / min_count  < 2:
+        #    return shading_names[2], shading_counts
 
         return shading_names[np.argmax(shading_counts)], shading_counts
 

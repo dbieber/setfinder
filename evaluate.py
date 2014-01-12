@@ -103,7 +103,7 @@ def main():
     cv2.namedWindow("w1", cv.CV_WINDOW_AUTOSIZE)
     bad_color_count = 0
     total = 0
-    for i, (filename, cards) in enumerate(groundtruth("data/ground_truth.txt")):
+    for i, (filename, cards) in enumerate(groundtruth("data/training.txt")):
         for card in cards:
             pts = points_from_card(card)
             image = cv2.imread(filename)
