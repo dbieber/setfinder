@@ -115,16 +115,14 @@ class CardIdentifier():
         bag = self.bag_from(image)
         return self.shape_clf.predict(bag)
 
-    def predict_color(self, image):
+    def predict_color(self, image, flag = False):
         gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
-        edges = cv2.Canny(gray, 404/3, 156/3, apertureSize=3)
+        edges = cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
         # Assumes rectified image
         height, width = edges.shape
         x = width / 2
-        inside = False
-
 
         # weird HSV
 
@@ -140,31 +138,39 @@ class CardIdentifier():
         """
         colors = [RED, GREEN, PURPLE]
         color_names = ["red", "green", "purple"]
-        color_counts = [0, 0, 0]
-        for x in [width/2-5, width/2, width/2+5]:
+        color_counts = np.array([0, 0, 0])
+        for x in range(width/2-10, width/2+10):
+            inside = False
+            ever_switch = False
+            color_counts_before = color_counts.copy()
             for y in range(5, height-5):
                 if edges[y, x] > 0:
                     inside = not inside
+                    ever_switch = True
 
                 if inside:
                     color = np.array(image[y,x])
-                    if color[0] <= 5 or 177 <= color[0]:
+                    if flag:
+                        print color
+                    """
+                    if color[0] <= 20 or 165 <= color[0]:
                         color_counts[0] += 1
-                    if 40 <= color[0] <= 70:
+                    if 30 <= color[0] <= 90:
                         color_counts[1] += 1
-                    if 120 <= color[0] <= 70:
+                    if 100 <= color[0] <= 165:
                         color_counts[2] += 1
                     """
                     dists = []
                     for c in colors:
                         d1 = abs(c[0]-color[0]) 
                         d2 = abs(c[0]+180-color[0]) 
-                        dists.append(min(d1, d2))
+                        dists.append(d1)
                     if np.min(dists) < 25:
                         color_counts[np.argmin(dists)] += 1
-                    """
+            if not ever_switch or inside:
+                color_counts = color_counts_before
 
-        return color_names[np.argmax(color_counts)]
+        return color_names[np.argmax(color_counts)], color_counts
 
     def predict(self, image):
         # skew = self.rectify(image, pts)
