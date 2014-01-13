@@ -441,24 +441,8 @@ def test_cards():
 
 def main():
 
-    vc = cv2.VideoCapture(0)
-    cv2.namedWindow('win', cv.CV_WINDOW_AUTOSIZE)
-
-    if vc.isOpened(): # try to get the first frame
-        rval, frame = vc.read()
-    else:
-        rval = False
-    looking_at = 0
-    while True:
-        rval, frame = vc.read()
-
-        key = cv2.waitKey(10)
-        if key == 27: # exit on ESC
-            break
-
-        if frame is None:
-            continue
-
+    def display(frame):
+        looking_at = 0
         frame = cv2.resize(frame, (640,480))
         quads = []
         for i in range(0, 3):
@@ -481,7 +465,7 @@ def main():
 
         key = cv2.waitKey(1)
         if key == 27: # exit on ESC
-            break
+            sys.exit(0)
         if len(cards) > 0:
             key = cv2.waitKey(0)
             while key != ord('t'):
@@ -507,6 +491,31 @@ def main():
                     sys.exit(0)
 
                 key = cv2.waitKey(0)
+
+    if len(sys.argv) > 1:
+        use_camera = False
+        image = imread(sys.argv[1])
+        display(image)
+    else:
+
+        vc = cv2.VideoCapture(0)
+        cv2.namedWindow('win', cv.CV_WINDOW_AUTOSIZE)
+
+        if vc.isOpened(): # try to get the first frame
+            rval, frame = vc.read()
+        else:
+            rval = False
+        while True:
+            rval, frame = vc.read()
+
+            key = cv2.waitKey(10)
+            if key == 27: # exit on ESC
+                break
+
+            if frame is None:
+                continue
+
+            display(frame)
 
 
 
