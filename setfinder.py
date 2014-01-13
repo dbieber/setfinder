@@ -4,7 +4,7 @@
 # <codecell>
 
 #%pylab inline
-import cv
+#import cv
 import cv2
 import numpy as np
 #import matplotlib.pyplot as plt
@@ -424,7 +424,7 @@ def main():
     print card_finder
     print 'hit any key to take a picture'
     vc = cv2.VideoCapture(0)
-    cv2.namedWindow('win', cv.CV_WINDOW_AUTOSIZE)
+    cv2.namedWindow('win', cv2.CV_WINDOW_AUTOSIZE)
 
     if vc.isOpened(): # try to get the first frame
         rval, frame = vc.read()
