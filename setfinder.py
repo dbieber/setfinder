@@ -4,7 +4,7 @@
 # <codecell>
 
 #%pylab inline
-import cv
+#import cv
 import cv2
 import numpy as np
 #import matplotlib.pyplot as plt
@@ -443,6 +443,7 @@ def main():
 
     def display(frame):
         looking_at = 0
+
         frame = cv2.resize(frame, (640,480))
         quads = []
         for i in range(0, 3):
