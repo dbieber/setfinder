@@ -43,9 +43,16 @@ class Card():
         self.centerpt = None
         self.distlist = None
 
+        self.shape_pred = None
+
     def opencv_show(self):
         cv2.destroyWindow('card_window')
         cv2.imshow('card_window', self.image)
+
+    def opencv_show_canny(self):
+        cv2.destroyWindow('canny_window')
+        cv2.imshow('canny_window', self.edgesimage)
+        cv2.moveWindow('canny_window', 400, 0)
         
     def gray(self):
         if self.grayimage is None:
@@ -54,7 +61,7 @@ class Card():
 
     def edges(self):
         if self.edgesimage is None:
-            self.edgesimage = cv2.Canny(self.gray(), 404/3, 156/3, apertureSize=3)
+            self.edgesimage = cv2.Canny(self.gray(), 404/8, 156/8, apertureSize=3)
         return self.edgesimage
 
     def hsv(self):
@@ -80,7 +87,13 @@ class Card():
             canny = self.edges()
             center = self.center()
             dists = dists_to_edges(canny, center)
-            self.distlist = dists / np.linalg.norm(dists)
+            for i in range(len(dists)):
+                dists[i] = dists[i]**3
+            denom = np.linalg.norm(dists)
+            if denom != 0:
+                self.distlist = dists / denom
+            else:
+                self.distlist = dists
         return self.distlist
 
     def predict_number(self):
@@ -112,7 +125,7 @@ class Card():
     def predict_shading(self):
         if self.shading is None:
             gray = self.gray()
-            edges = cv2.Canny(gray, 404/2, 156/2, apertureSize=3)
+            edges = cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
             number = self.number
             height, width = gray.shape
 
@@ -139,7 +152,7 @@ class Card():
     def predict_color(self, flag=False):
         if self.color is None:
             gray = self.gray()
-            edges = cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
+            edges = self.edges() #cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
             image = self.hsv()
 
             # Assumes rectified image
@@ -221,8 +234,13 @@ class Card():
             shape_distlists = [c.dists() for c in [diamondcard, squigglecard, rectanglecard]]
             sims = [similarity(dists, distlist) for distlist in shape_distlists]
 
-            shapes = ["diamond", "squiggle", "rounded-rectangle"]
-            self.shape = shapes[np.argmax(sims)]
+            if np.max(sims) < .5:
+                self.shape = 'fail'
+            else:
+                shapes = ["diamond", "squiggle", "rounded-rectangle"]
+                self.shape = shapes[np.argmax(sims)]
+                self.shape_pred = sims
+
         return self.shape
 
 
@@ -252,8 +270,10 @@ def find_center(canny, number=1):
 def distance_to_edge(canny, pt, direction):
     dist = 0.0
     point = pt  # x,y
+    dx = np.cos(direction)
+    dy = np.sin(direction)
     while dist < 50 and not is_edge_at(canny, point):
-        point = (int(pt[0] + dist * np.cos(direction)), int(pt[1] + dist * np.sin(direction)))
+        point = (int(pt[0] + dist * dx), int(pt[1] + dist * dy))
         dist += 1
     return dist
 
@@ -421,8 +441,6 @@ def test_cards():
 
 def main():
 
-    print card_finder
-    print 'hit any key to take a picture'
     vc = cv2.VideoCapture(0)
     cv2.namedWindow('win', cv.CV_WINDOW_AUTOSIZE)
 
@@ -430,11 +448,9 @@ def main():
         rval, frame = vc.read()
     else:
         rval = False
-
     looking_at = 0
     while True:
         rval, frame = vc.read()
-        print frame
 
         key = cv2.waitKey(10)
         if key == 27: # exit on ESC
@@ -474,6 +490,8 @@ def main():
                     if looking_at < 0:
                         looking_at = len(cards) - 1
                     cards[looking_at].opencv_show()
+                    cards[looking_at].opencv_show_canny()
+                    print cards[looking_at].shape_pred
                     print ' '.join(cards[looking_at].labels())
 
                 if key == ord('n'):
@@ -481,7 +499,12 @@ def main():
                     if looking_at >= len(cards):
                         looking_at = 0
                     cards[looking_at].opencv_show()
+                    cards[looking_at].opencv_show_canny()
+                    print cards[looking_at].shape_pred
                     print ' '.join(cards[looking_at].labels())
+                
+                if key == 27: # exit on ESC
+                    sys.exit(0)
 
                 key = cv2.waitKey(0)
 

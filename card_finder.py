@@ -271,7 +271,7 @@ def get_intersections(segments):
                 if 0 <= t <= 1 and 0 <= u <= 1:
                     x, y = p+t*r
                     x2, y2 = q+u*s
-                    if abs(np.dot(r,s)/np.linalg.norm(r)/np.linalg.norm(s)) < .8:
+                    if abs(np.dot(r,s)/np.linalg.norm(r)/np.linalg.norm(s)) < .4:
                     #if 0 <= x <= width and 0 <= y <= height:
                         these_intersections.append([x,y,i,j])
                         intersections[j].append([x,y,i,j])
@@ -412,7 +412,7 @@ def find_cards(img1, rho, theta, threshold, minLineLength, maxLineGap):
 
     gray = cv2.blur(gray, (3, 3))
     edges = cv2.Canny(gray, 404/3, 156/3, apertureSize=3)
-    cv2.imshow('edges', edges)
+    #cv2.imshow('edges', edges)
     lines = cv2.HoughLinesP(edges,rho, theta, threshold, minLineLength=minLineLength, maxLineGap=maxLineGap)
     if lines is None:
         return []
