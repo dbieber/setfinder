@@ -73,7 +73,7 @@ class Card():
 
     @memoized
     def edges(self):
-        return cv2.Canny(self.gray(), 404/8, 156/8, apertureSize=3)
+        return cv2.Canny(self.gray(), 404/2, 156/2, apertureSize=3)
 
     @memoized
     def hsv(self):
@@ -87,6 +87,9 @@ class Card():
     def fail(self):
         if 'fail' in self.labels():
             return True
+
+
+        return False
 
     def labels(self):
         return [self.predict_number(), self.predict_shading(), self.predict_color(), self.predict_shape()]
@@ -577,30 +580,17 @@ def test_cards():
 
 def main():
 
-    vc = cv2.VideoCapture(0)
-    cv2.namedWindow('win', cv2.CV_WINDOW_AUTOSIZE)
-
-    if vc.isOpened(): # try to get the first frame
-        rval, frame = vc.read()
-    else:
-        rval = False
-    looking_at = 0
-    while True:
-        rval, frame = vc.read()
-
-        key = cv2.waitKey(10)
-        if key == 27: # exit on ESC
-            break
-
-        if frame is None:
-            continue
+    def display(frame):
+        looking_at = 0
 
         frame = cv2.resize(frame, (640,480))
-        quads = []
-        for i in range(0, 3):
-            quads.extend(card_finder.find_cards_with_parameter_setting(frame, i))
+        #quads = []
+        #for i in range(0, 7):
+        #    quads.extend(card_finder.find_cards_with_parameter_setting(frame, i))
 
-        quads = card_finder.reduce_quads(quads)
+        quads = card_finder.new_card_finder(frame)
+        #quads = card_finder.reduce_quads(quads)
+        quads = card_finder.rotate_quads(quads)
         cards = []
         for q in quads:
             card = Card(rectify(frame, q))
@@ -614,36 +604,58 @@ def main():
         image = mark_quads(frame, quads)
         cv2.imshow('win', image)
 
-        rval, frame = vc.read()
         looking_at = 0
 
         key = cv2.waitKey(1)
         if key == 27: # exit on ESC
-            break
-        if len(cards) > 0:
+            sys.exit(0)
+        key = cv2.waitKey(0)
+        while key != ord('t'):
+            if key == ord('p'):
+                looking_at -= 1
+                if looking_at < 0:
+                    looking_at = len(cards) - 1
+                cards[looking_at].opencv_show()
+                cards[looking_at].opencv_show_canny()
+                print ' '.join(cards[looking_at].labels())
+
+            if key == ord('n'):
+                looking_at += 1
+                if looking_at >= len(cards):
+                    looking_at = 0
+                cards[looking_at].opencv_show()
+                cards[looking_at].opencv_show_canny()
+                print ' '.join(cards[looking_at].labels())
+
+            if key == 27: # exit on ESC
+                sys.exit(0)
+
             key = cv2.waitKey(0)
-            while key != ord('t'):
-                if key == ord('p'):
-                    looking_at -= 1
-                    if looking_at < 0:
-                        looking_at = len(cards) - 1
-                    cards[looking_at].opencv_show()
-                    cards[looking_at].opencv_show_canny()
-                    print ' '.join(cards[looking_at].labels())
 
-                if key == ord('n'):
-                    looking_at += 1
-                    if looking_at >= len(cards):
-                        looking_at = 0
-                    cards[looking_at].opencv_show()
-                    cards[looking_at].opencv_show_canny()
-                    print ' '.join(cards[looking_at].labels())
+    if len(sys.argv) > 1:
+        use_camera = False
+        image = cv2.imread(sys.argv[1])
+        display(image)
+    else:
 
-                if key == 27: # exit on ESC
-                    sys.exit(0)
+        vc = cv2.VideoCapture(0)
+        cv2.namedWindow('win', cv2.CV_WINDOW_AUTOSIZE)
 
-                key = cv2.waitKey(0)
+        if vc.isOpened(): # try to get the first frame
+            rval, frame = vc.read()
+        else:
+            rval = False
 
+        while True:
+            rval, frame = vc.read()
+            key = cv2.waitKey(10)
+            if frame is None:
+                continue
+            else:
+                display(frame)
+
+            if key == 27: # exit on ESC
+                break
 
 
 """
@@ -683,15 +695,14 @@ def mark_quads(image, quads):
         cv2.fillPoly(image,arr,(0,0,100))
     return image
 
+if __name__ == '__main__':
+    trainX, trainY = gen_data("data/training.txt")
+    diamondcard = exampleofcard(SHAPE, "diamond")
+    rectanglecard = exampleofcard(SHAPE, "rounded-rectangle")
+    squigglecard = exampleofcard(SHAPE, "squiggle")
 
-trainX, trainY = gen_data("data/training.txt")
-diamondcard = exampleofcard(SHAPE, "diamond")
-rectanglecard = exampleofcard(SHAPE, "rounded-rectangle")
-squigglecard = exampleofcard(SHAPE, "squiggle")
+    CLASSIFIER = Classifier()
+    CLASSIFIER.fit(trainX, trainY)
 
-CLASSIFIER = Classifier()
-CLASSIFIER.fit(trainX, trainY)
-
-main()
-
+    main()
 
