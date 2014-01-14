@@ -14,6 +14,8 @@ import math
 import card_finder
 from memoize import memoized
 
+from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsClassifier
 # <codecell>
 
 NUMBER, SHADING, COLOR, SHAPE = 0, 1, 2, 3
@@ -29,12 +31,32 @@ NUMBER, SHADING, COLOR, SHAPE = 0, 1, 2, 3
 # Data
 
 # <codecell>
+class Classifier():
+    def __init__(self):
+        self.number_clf = SVC()
+        self.shading_clf = SVC()
+        self.color_clf = SVC()
+        self.shape_clf = SVC()
+
+    def fit(self, X, Y):
+        for card, labels in zip(X, Y):
+            card.known_number = labels[NUMBER]
+
+        number_features = [card.number_features() for card in X]
+        shading_features = [card.shading_features() for card in X]
+        color_features = [card.color_features() for card in X]
+        shape_features = [card.shape_features() for card in X]
+
+        self.number_clf.fit(number_features, Y[:,NUMBER])
+        self.shading_clf.fit(shading_features, Y[:,SHADING])
+        self.color_clf.fit(color_features, Y[:,COLOR])
+        self.shape_clf.fit(shape_features, Y[:,SHAPE])
 
 class Card():
     def __init__(self, image):
         self.image = image  # already rectified
 
-        self.shape_pred = None
+        self.known_number = None
 
     def opencv_show(self):
         cv2.destroyWindow('card_window')
@@ -83,7 +105,30 @@ class Card():
             return dists
 
     @memoized
+    def number_features(self):
+        edges = self.edges()
+        height, width = edges.shape
+        xs = [width / 2]
+        features = []
+        for x in xs:
+            count = 0
+            waiting = 0
+            for y in range(5, height-5):
+                if edges[y][x] > 0 and waiting <= 0:
+                    waiting = 10
+                    count = count + 1
+                waiting = waiting - 1
+
+            features.append(count)
+
+        return features
+
+    @memoized
     def predict_number(self):
+        return self.known_number or CLASSIFIER.number_clf.predict(self.number_features())[0]
+
+    @memoized
+    def predict_number_old(self):
         edges = self.edges()
         height, width = edges.shape
         x = width / 2
@@ -108,7 +153,30 @@ class Card():
     # <codecell>
 
     @memoized
+    def shading_features(self):
+        gray = self.gray()
+        edges = cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
+        height, width = gray.shape
+
+        tc = (10,50) # topcenter row,col
+        white = np.mean(gray[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2])
+
+        center = self.center()
+
+        ws = 2 # window size
+        window = gray[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws]
+        avg_color = np.mean(window)
+
+        ratio = avg_color / white
+        return [ratio, avg_color, white]
+
+
+    @memoized
     def predict_shading(self):
+        return CLASSIFIER.shading_clf.predict(self.shading_features())[0]
+
+    @memoized
+    def predict_shading_old(self):
         gray = self.gray()
         edges = cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
         number = self.predict_number()
@@ -134,7 +202,86 @@ class Card():
     # <codecell>
 
     @memoized
-    def predict_color(self, flag=False):
+    def color_features(self, flag=False):
+        gray = self.gray()
+        edges = self.edges() #cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
+        image = self.hsv()
+
+        # Assumes rectified image
+        height, width = edges.shape
+        x = width / 2
+
+        # weird HSV
+
+        RED = np.array([2, 224, 189])
+        GREEN = np.array([70, 240, 105])
+        PURPLE = np.array([166, 207, 79])
+
+        # HSV
+        """
+        RED = np.array([5, 88, 74])
+        GREEN = np.array([141, 94, 41])
+        PURPLE = np.array([293, 81, 31])
+        """
+        colors = [RED, GREEN, PURPLE]
+        color_names = ["red", "green", "purple"]
+        color_counts = np.array([0, 0, 0])
+        for x in range(width/2-10, width/2+10, 4):
+
+            inside = False
+            ever_switch = False
+            beginning = True
+            beg_count = 0
+            beg_color = np.array([0, 0, 0])
+            color_counts_before = color_counts.copy()
+            for y in range(5, height-5):
+                if edges[y, x] > 0:
+                    if beginning and beg_count != 0:
+                        beg_color /= beg_count
+                    if flag:
+                        print 'beg_color', beg_color
+                    beginning = False
+                    inside = not inside
+                    ever_switch = True
+
+                if beginning:
+                    beg_count += 1
+                    beg_color += image[y,x]
+
+
+                if inside:
+                    color = np.array(image[y,x])
+                    if flag:
+                        print color
+
+                    if np.linalg.norm(color-beg_color, ord=1) < 60:
+                        continue
+                    """
+                    if color[0] <= 20 or 165 <= color[0]:
+                        color_counts[0] += 1
+                    if 30 <= color[0] <= 90:
+                        color_counts[1] += 1
+                    if 100 <= color[0] <= 165:
+                        color_counts[2] += 1
+                    """
+                    dists = []
+                    for c in colors:
+                        d1 = abs(c[0]-color[0])
+                        d2 = abs(c[0]+180-color[0])
+                        dists.append(min(d1,d2))
+                    if np.min(dists) < 25:
+                        color_counts[np.argmin(dists)] += 1
+            if not ever_switch or inside:
+                color_counts = color_counts_before
+        return color_counts
+
+
+    @memoized
+    def predict_color(self):
+        return CLASSIFIER.color_clf.predict(self.color_features())[0]
+
+    @memoized
+    def predict_color_old(self, flag=False):
         gray = self.gray()
         edges = self.edges() #cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
         image = self.hsv()
@@ -211,7 +358,16 @@ class Card():
     # <codecell>
 
     @memoized
+    def shape_features(self):
+        return self.dists()
+
+
+    @memoized
     def predict_shape(self):
+        return CLASSIFIER.shape_clf.predict(self.shape_features())[0]
+
+    @memoized
+    def predict_shape_old(self):
         dists = self.dists()
 
         shape_distlists = [c.dists() for c in [diamondcard, squigglecard, rectanglecard]]
@@ -222,7 +378,6 @@ class Card():
         else:
             shapes = ["diamond", "squiggle", "rounded-rectangle"]
             shape = shapes[np.argmax(sims)]
-            self.shape_pred = sims
             return shape
 
 
@@ -452,7 +607,9 @@ def main():
             if not card.fail():
                 cards.append(card)
 
-        print set(' '.join(c.labels()) for c in cards)
+        print len(cards)
+        for card in cards:
+            print card.labels()
 
         image = mark_quads(frame, quads)
         cv2.imshow('win', image)
@@ -472,7 +629,6 @@ def main():
                         looking_at = len(cards) - 1
                     cards[looking_at].opencv_show()
                     cards[looking_at].opencv_show_canny()
-                    print cards[looking_at].shape_pred
                     print ' '.join(cards[looking_at].labels())
 
                 if key == ord('n'):
@@ -481,7 +637,6 @@ def main():
                         looking_at = 0
                     cards[looking_at].opencv_show()
                     cards[looking_at].opencv_show_canny()
-                    print cards[looking_at].shape_pred
                     print ' '.join(cards[looking_at].labels())
 
                 if key == 27: # exit on ESC
@@ -533,6 +688,9 @@ trainX, trainY = gen_data("data/training.txt")
 diamondcard = exampleofcard(SHAPE, "diamond")
 rectanglecard = exampleofcard(SHAPE, "rounded-rectangle")
 squigglecard = exampleofcard(SHAPE, "squiggle")
+
+CLASSIFIER = Classifier()
+CLASSIFIER.fit(trainX, trainY)
 
 main()
 
