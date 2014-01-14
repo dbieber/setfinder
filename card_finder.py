@@ -50,7 +50,7 @@ def get_segments(lines, edges, sobelx, sobely, probabilistic):
                     seqx = np.repeat(x2, int(diag)/inc)
                 else:
                     seqx = np.arange(x1, x2, dx*inc)
-                    
+
                 if dy == 0:
                     seqy = np.repeat(y2, int(diag)/inc)
                 else:
@@ -63,7 +63,7 @@ def get_segments(lines, edges, sobelx, sobely, probabilistic):
                     if border <= y_i < width-border and border <= x_i < height-border:
                         for i in range(-border, border):
                             for j in range(-border, border):
-                                if edges[y_i+j][x_i+i] > 0: 
+                                if edges[y_i+j][x_i+i] > 0:
                                     #edges2 = copy.deepcopy(edges)
                                     #cv2.circle(edges2, (int(x_i), int(y_i)), 5, (255,255,255), -1)
                                     #print x_i, y_i
@@ -87,9 +87,9 @@ def get_segments(lines, edges, sobelx, sobely, probabilistic):
                             if y_i < small_y:
                                 small_y = y_i
                                 large_y = start_y
-                            short_seg.append((int(small_x-inc*dx*2), 
-                                              int(small_y-inc*dy*2), 
-                                              int(large_x+inc*dx*2), 
+                            short_seg.append((int(small_x-inc*dx*2),
+                                              int(small_y-inc*dy*2),
+                                              int(large_x+inc*dx*2),
                                               int(large_y+inc*dy*2)))
                             in_line = False
                 if in_line:
@@ -103,9 +103,9 @@ def get_segments(lines, edges, sobelx, sobely, probabilistic):
                     if y_i < small_y:
                         small_y = y_i
                         large_y = start_y
-                    short_seg.append((int(small_x-inc*dx*2), 
-                                      int(small_y-inc*dy*2), 
-                                      int(large_x+inc*dx*2), 
+                    short_seg.append((int(small_x-inc*dx*2),
+                                      int(small_y-inc*dy*2),
+                                      int(large_x+inc*dx*2),
                                       int(large_y+inc*dy*2)))
 
 
@@ -148,7 +148,7 @@ def get_segments(lines, edges, sobelx, sobely, probabilistic):
                                 for j in range(-border, border):
                                     grad = np.array([sobelx[y_i+j][x_i+i], sobely[y_i+j][x_i+i]])
                                     if (edges[y_i+j][x_i+i] > 0):# and
-                                        #abs(np.dot(grad, np.array([dx, dy])))/np.linalg.norm(grad) < .7): 
+                                        #abs(np.dot(grad, np.array([dx, dy])))/np.linalg.norm(grad) < .7):
                                         already_added = False
                                         for l in line_using[int(y_i+j)][int(x_i+i)]:
                                             if l != index and keep_seg[l]:
@@ -169,7 +169,7 @@ def get_segments(lines, edges, sobelx, sobely, probabilistic):
                                                 already_added = True
                                         if not already_added:
                                             line_using[int(y_i+j)][int(x_i+i)].append(index)
-                                            
+
                                         flag = flag + 1
 
                             if flag == 0:
@@ -186,7 +186,7 @@ def get_segments(lines, edges, sobelx, sobely, probabilistic):
 
                                             grad = np.array([sobelx[y_i+j][x_i+i], sobely[y_i+j][x_i+i]])
                                             if (edges[y_i+j][x_i+i] > 0):# and
-                                                #abs(np.dot(grad, np.array([dx, dy])))/np.linalg.norm(grad) < .7): 
+                                                #abs(np.dot(grad, np.array([dx, dy])))/np.linalg.norm(grad) < .7):
                                                 direction = 1
                                                 break
                                         if direction == 1:
@@ -238,9 +238,9 @@ def get_segments(lines, edges, sobelx, sobely, probabilistic):
                 x_end = x_end + end_change*dx*scale
                 y_end = y_end + end_change*dy*scale
 
-                short_seg.append((int(x_start), 
-                                  int(y_start), 
-                                  int(x_end), 
+                short_seg.append((int(x_start),
+                                  int(y_start),
+                                  int(x_end),
                                   int(y_end)))
 
                 index = index + 1
@@ -301,7 +301,7 @@ def get_quads(intersections):
         if other == i:
             other = b
         return other
-         
+
 
     def make_quad(intersections):
         q = []
@@ -314,7 +314,7 @@ def get_quads(intersections):
     for i in range(len(intersections)):
         for j in range(len(intersections[i])):
             other = get_other_index(intersections[i][j], i)
-            
+
             index = find_intersection_index(intersections[other], i)
 
             for m in range(search_range):
@@ -355,7 +355,7 @@ def get_quads(intersections):
                                         l2 = float(length[p])
                                         if not (.25 < l1/l2 < 4):
                                             flag = True
-                                
+
                                 if not flag:
                                     quads.add(q)
 
@@ -537,7 +537,7 @@ def new_card_finder(image):
 
             search_length = 5
             length = len(nodes)
-                
+
 
             def find_nearby_dot(i):
                 y, x = convert_from_flatened_index(nodes[i])
@@ -552,7 +552,7 @@ def new_card_finder(image):
             corners = []
             i = 0
             dot_threshold = .9
-            while i < length: 
+            while i < length:
                 mindot = find_nearby_dot(i)
                 if 0 < mindot < dot_threshold:
                     minindex = i
@@ -582,8 +582,21 @@ def new_card_finder(image):
     cv2.imshow('connected_edges', connected_edges)
     cv2.waitKey(0)
     """
+    def keep_rectangles(quads):
+        final_quads = []
+        for q in quads:
+            for i in range(len(q)):
+                q1 = np.array(q[i])
+                q2 = np.array(q[(i+1)%len(q[i])])
+                q3 = np.array(q[(2+1)%len(q[i])])
+                v1 = q2-q1
+                v2 = q2-q3
+                if abs(np.dot(v1, v2))/(np.linalg.norm(v1)*np.linalg.norm(v2)) < .5:
+                    final_quads.append(q)
+        return final_quads
+
     quads = reduce_quads(quads)
-    return quads
+    return keep_rectangles(quads)
 
 def test_card_finder():
     image = cv2.imread(sys.argv[1])

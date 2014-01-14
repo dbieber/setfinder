@@ -55,7 +55,7 @@ class Card():
         cv2.destroyWindow('canny_window')
         cv2.imshow('canny_window', self.edgesimage)
         cv2.moveWindow('canny_window', 400, 0)
-        
+
     def gray(self):
         if self.grayimage is None:
             self.grayimage = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
@@ -80,7 +80,7 @@ class Card():
     def fail(self):
         if 'fail' in self.labels():
             return True
-            
+
 
         return False
 
@@ -450,6 +450,7 @@ def main():
         looking_at = 0
 
         frame = cv2.resize(frame, (640,480))
+        origframe = frame.copy()
         #quads = []
         #for i in range(0, 7):
         #    quads.extend(card_finder.find_cards_with_parameter_setting(frame, i))
@@ -465,7 +466,7 @@ def main():
         image = mark_quads(frame, quads)
         cv2.imshow('win', image)
 
-        
+
 
         print 'keep this image? y/n'
         ans = (cv2.waitKey(0))
@@ -478,7 +479,7 @@ def main():
                 file_name = os.path.join(dir_name, str(i) + '.jpg')
                 if not os.path.isfile(file_name):
                     break
-            cv2.imwrite(file_name, image)
+            cv2.imwrite(file_name, origframe)
             f = open('data/positive_data.txt', 'a')
             g = open('data/negative_data.txt', 'a')
             f.write(file_name + ': ')
@@ -564,7 +565,7 @@ def main():
             g.write('\n')
             f.close()
             g.close()
-                
+
 
 
         looking_at = 0
@@ -591,7 +592,7 @@ def main():
                 cards[looking_at].opencv_show_canny()
                 print cards[looking_at].shape_pred
                 print ' '.join(cards[looking_at].labels())
-            
+
             if key == 27: # exit on ESC
                 sys.exit(0)
 
@@ -613,17 +614,15 @@ def main():
             rval = False
 
         while True:
-
+            rval, frame = vc.read()
             key = cv2.waitKey(10)
-            if key == 27: # exit on ESC
-                break
-
             if frame is None:
                 continue
+            else:
+                display(frame)
 
-            display(frame)
-            rval, frame = vc.read()
-
+            if key == 27: # exit on ESC
+                break
 
 
 """

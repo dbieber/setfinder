@@ -11,11 +11,13 @@ import numpy as np
 #import matplotlib.pyplot as plt
 #import matplotlib.cm as cm
 import math
+import random
 import card_finder
 from memoize import memoized
 
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.ensemble import RandomForestClassifier
 # <codecell>
 
 NUMBER, SHADING, COLOR, SHAPE = 0, 1, 2, 3
@@ -34,9 +36,9 @@ NUMBER, SHADING, COLOR, SHAPE = 0, 1, 2, 3
 class Classifier():
     def __init__(self):
         self.number_clf = SVC()
-        self.shading_clf = SVC()
-        self.color_clf = SVC()
-        self.shape_clf = SVC()
+        self.shading_clf = RandomForestClassifier(50)
+        self.color_clf = RandomForestClassifier(50)
+        self.shape_clf = RandomForestClassifier(50)
 
     def fit(self, X, Y):
         for card, labels in zip(X, Y):
@@ -98,14 +100,7 @@ class Card():
     def dists(self):
         canny = self.edges()
         center = self.center()
-        dists = dists_to_edges(canny, center)
-        for i in range(len(dists)):
-            dists[i] = dists[i]**3
-        denom = np.linalg.norm(dists)
-        if denom != 0:
-            return dists / denom
-        else:
-            return dists
+        return dists_to_edges(canny, center)
 
     @memoized
     def number_features(self):
@@ -160,18 +155,30 @@ class Card():
         gray = self.gray()
         edges = cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
         height, width = gray.shape
+        image = self.hsv()
 
-        tc = (10,50) # topcenter row,col
-        white = np.mean(gray[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2])
+        ratios = []
+        white = []
+        window = []
+        for tc in [(10,50), (10, 20), (10, 80)]: # topcenter row,col
+            white.append(np.mean(image[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2,0]))
+            white.append(np.mean(image[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2,1]))
+            white.append(np.mean(gray[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2]))
 
-        center = self.center()
+            center = self.center()
 
-        ws = 2 # window size
-        window = gray[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws]
-        avg_color = np.mean(window)
+            ws = 2 # window size
+            window.append(np.mean(image[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws, 0]))
+            window.append(np.mean(image[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws, 1]))
+            window.append(np.mean(gray[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws]))
 
-        ratio = avg_color / white
-        return [ratio, avg_color, white]
+            ratio = np.array(window) / np.array(white)
+
+            ratios.append(ratio[1])
+            ratios.append(ratio[2])
+
+
+        return ratios #[np.mean(ratios)]
 
 
     @memoized
@@ -214,6 +221,10 @@ class Card():
         height, width = edges.shape
         x = width / 2
 
+        # lets get the color at the edge
+        # center = self.center()
+        # return colors_at_edges(edges, image, center)
+
         # weird HSV
 
         RED = np.array([2, 224, 189])
@@ -229,8 +240,15 @@ class Card():
         colors = [RED, GREEN, PURPLE]
         color_names = ["red", "green", "purple"]
         color_counts = np.array([0, 0, 0])
-        for x in range(width/2-10, width/2+10, 4):
-
+        avg_colors = []
+        avg_sats = []
+        final_avg = 0
+        final_total = 0
+        for x in range(width/2-20, width/2+20, 8):
+            avg_color = 0
+            avg_sat = 0
+            avg_sat_count = 0
+            avg_count = 0
             inside = False
             ever_switch = False
             beginning = True
@@ -238,6 +256,30 @@ class Card():
             beg_color = np.array([0, 0, 0])
             color_counts_before = color_counts.copy()
             for y in range(5, height-5):
+                color = np.array(image[y,x])
+                if color[1] > 50:
+                    if color[0] < 25:
+                        avg_color += 180
+                    avg_color += color[0]
+
+                    avg_count += 1
+                avg_sat += color[2]
+                avg_sat_count += 1
+
+            if avg_count < 0:
+
+                avg_color = 0
+                avg_sat = 0
+                avg_sat_count = 0
+                avg_count = 0
+                for y in range(5, height-5):
+                    color = np.array(image[y,x])
+                    avg_color += color[0]
+
+                    avg_count += 1
+                    avg_sat += color[2]
+                    avg_sat_count += 1
+                """
                 if edges[y, x] > 0:
                     if beginning and beg_count != 0:
                         beg_color /= beg_count
@@ -251,32 +293,66 @@ class Card():
                     beg_count += 1
                     beg_color += image[y,x]
 
+                color = np.array(image[y,x])
+                if not beginning and np.linalg.norm(color-beg_color, ord=1) > 10:
 
+                    avg_color += color
+                    avg_count += 1
+                """
+                """
                 if inside:
                     color = np.array(image[y,x])
                     if flag:
                         print color
 
-                    if np.linalg.norm(color-beg_color, ord=1) < 60:
+                    if np.linalg.norm(color-beg_color, ord=1) < 50:
                         continue
-                    """
+                """
+                """
                     if color[0] <= 20 or 165 <= color[0]:
                         color_counts[0] += 1
                     if 30 <= color[0] <= 90:
                         color_counts[1] += 1
                     if 100 <= color[0] <= 165:
                         color_counts[2] += 1
-                    """
+                """
+
+                """
                     dists = []
                     for c in colors:
                         d1 = abs(c[0]-color[0])
                         d2 = abs(c[0]+180-color[0])
                         dists.append(min(d1,d2))
+
                     if np.min(dists) < 25:
                         color_counts[np.argmin(dists)] += 1
+
             if not ever_switch or inside:
                 color_counts = color_counts_before
-        return color_counts
+            """
+
+            if avg_count == 0:
+                avg_colors.append(avg_color)
+
+            else:
+                avg_colors.append(avg_color/avg_count)
+
+            avg_sats.append(avg_color/avg_sat_count)
+
+
+
+        final_total = 0
+        total = 0
+        for a in avg_colors:
+            final_total += a
+            total += 1
+
+        if total != 0:
+            final_total /= total
+
+        #avg_colors.extend(avg_sats)
+        avg_colors.append(final_total)
+        return [final_total]  #np.average(avg_colors)
 
 
     @memoized
@@ -286,8 +362,8 @@ class Card():
     @memoized
     def predict_color_old(self, flag=False):
         gray = self.gray()
-        edges = self.edges() #cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
         image = self.hsv()
+        edges = cv2.Canny(image[:,:,1], 404/2, 156/2, apertureSize=3)
 
         # Assumes rectified image
         height, width = edges.shape
@@ -336,7 +412,7 @@ class Card():
                     if flag:
                         print color
 
-                    if np.linalg.norm(color-beg_color, ord=1) < 60:
+                    if abs(color[1]-beg_color[1]) < 60:
                         continue
                     """
                     if color[0] <= 20 or 165 <= color[0]:
@@ -417,6 +493,17 @@ def distance_to_edge(canny, pt, direction):
         dist += 1
     return dist
 
+
+def color_at_edge(canny, hsv, pt, direction):
+    dist = 0.0
+    point = pt  # x,y
+    dx = np.cos(direction)
+    dy = np.sin(direction)
+    while dist < 40 and not is_edge_at(canny, point):
+        point = (int(pt[0] + dist * dx), int(pt[1] + dist * dy))
+        dist += 1
+    return np.mean(hsv[point[1]-1:point[1]+1,point[0]-1:point[0]+1,0])
+
 # <codecell>
 
 def dists_to_edges(canny, point):
@@ -427,6 +514,15 @@ def dists_to_edges(canny, point):
             dist = dists[-1]
         dists.append(dist)
     return np.array(dists)
+
+def colors_at_edges(canny, hsv, point):
+    colors = []
+    for direction in np.arange(0,2*np.pi,np.pi/12):
+        color = color_at_edge(canny, hsv, point, direction)
+        if not (0 < color and color < 255):
+            color = colors[-1]
+        colors.append(color)
+    return np.array(colors)
 
 # <codecell>
 
@@ -502,6 +598,7 @@ def gen_data(filename):
             X.append(Card(cardimage))
             Y.append(attrs_from_card(card))
 
+    X = np.array(X)
     Y = np.array(Y)
     return X, Y
 
@@ -538,26 +635,28 @@ def exampleofcard(feature=SHADING, value="empty"):
 
 
 def test_cards():
-    X, Y = gen_data("data/training.txt")
+    X, Y = gen_data("data/total_data.txt")
 
     # <codecell>
 
     counts = [0] * 5
     for card, labels in zip(X, Y):
-        card.predict_number()
-        card.predict_shading()
-        card.predict_color()
-        card.predict_shape()
 
         numberok = card.predict_number() == labels[NUMBER]
         shadingok = card.predict_shading() == labels[SHADING]
         colorok = card.predict_color() == labels[COLOR]
         shapeok = card.predict_shape() == labels[SHAPE]
 
-        if not shadingok:
-            gray = card.gray().copy()
-            cv2.circle(gray, card.center(), 1, 255)
-            #show(gray)
+
+        if not colorok:
+            image = card.image.copy()
+            cv2.circle(image, card.center(), 1, 255)
+            cv2.destroyWindow('image')
+            cv2.imshow('image', image)
+            #print "Predict: ", ' '.join(str(x) for x in card.labels())
+            #print "Actual:  ", ' '.join(labels)
+            #print
+            #cv2.waitKey(0)
 
         counts[NUMBER] += numberok
         counts[SHADING] += shadingok
@@ -597,11 +696,13 @@ def main():
             if not card.fail():
                 cards.append(card)
 
-        print len(cards)
-        for card in cards:
-            print card.labels()
+        print ', '.join(' '.join(card.labels()) for card in cards)
 
-        image = mark_quads(frame, quads)
+        sets = calc_sets(cards)
+        if not sets is None:
+            image = mark_set(frame, sets, quads)
+        else:
+            image = mark_quads(frame, quads)
         cv2.imshow('win', image)
 
         looking_at = 0
@@ -668,15 +769,22 @@ def main():
  entry to be the index into the quad array
 """
 def calc_sets(card_list):
-    for i in range(len(card_list)):
-        for j in range(i+1, len(card_list)):
-            for k in range(j+1, len(card_list)):
+    for i, cardi in enumerate(card_list):
+        for j, cardj in enumerate(card_list):
+            if j == i:
+                continue
+            for k, cardk in enumerate(card_list):
+                if k == i or k == j:
+                    continue
+                is_ok = True
                 for l in range(4):
-                    if ((card_list[i][l] == card_list[j][l] == card_list[k][l]) or
-                        (card_list[i][l] != card_list[j][l] and
-                        card_list[j][l] != card_list[k][l] and
-                        card_list[k][l] != card_list[i][l])):
-                        return i,j,k
+                    if not ((cardi.labels()[l] == cardj.labels()[l] == cardk.labels()[l]) or
+                        (cardi.labels()[l] != cardj.labels()[l] and
+                        cardj.labels()[l] != cardk.labels()[l] and
+                        cardk.labels()[l] != cardi.labels()[l])):
+                        is_ok = False
+                if is_ok:
+                    return i,j,k
     return None
 
 """
@@ -695,14 +803,34 @@ def mark_quads(image, quads):
         cv2.fillPoly(image,arr,(0,0,100))
     return image
 
-if __name__ == '__main__':
-    trainX, trainY = gen_data("data/training.txt")
-    diamondcard = exampleofcard(SHAPE, "diamond")
-    rectanglecard = exampleofcard(SHAPE, "rounded-rectangle")
-    squigglecard = exampleofcard(SHAPE, "squiggle")
+# diamondcard = exampleofcard(SHAPE, "diamond")
+# rectanglecard = exampleofcard(SHAPE, "rounded-rectangle")
+# squigglecard = exampleofcard(SHAPE, "squiggle")
 
+def showcards(X,Y):
+    cv2.namedWindow('win')
+    for card, labels in zip(X,Y):
+        cv2.destroyWindow('win')
+        cv2.imshow('win', card.image)
+        raw_input()
+
+if __name__ == '__main__':
+    trainX, trainY = gen_data("data/total_data.txt")
+
+
+    # showcards(trainX, trainY)
+
+    perm = range(len(trainX))
+    random.shuffle(perm)
+    N = 100
+    trainX = trainX[perm[:N]]
+    trainY = trainY[perm[:N]]
+
+    print "Training on %d images..." % len(trainX)
     CLASSIFIER = Classifier()
     CLASSIFIER.fit(trainX, trainY)
+
+    #test_cards()
 
     main()
 

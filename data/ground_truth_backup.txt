@@ -1,0 +1,9 @@
+data/input_images/1.jpg: one solid green rounded-rectangle
+data/input_images/2.jpg: two empty purple rounded-rectangle
+data/input_images/3.jpg: two empty purple rounded-rectangle
+data/input_images/4.jpg: two empty purple rounded-rectangle
+data/input_images/5.jpg: two empty purple rounded-rectangle; three striped red rounded-rectangle; one striped red squiggle; three solid red rounded-rectangle
+data/input_images/6.jpg: two empty purple rounded-rectangle; three striped red rounded-rectangle; one striped red squiggle; three solid red rounded-rectangle
+data/input_images/7.jpg: two empty purple rounded-rectangle; three striped red rounded-rectangle; one striped red squiggle; three solid red rounded-rectangle; two empty red diamond; three solid purple rounded-rectangle; three empty red rounded-rectangle
+data/input_images/squiggles.jpg: one empty red squiggle; one solid red squiggle; one striped red squiggle; two empty red squiggle; two solid red squiggle; two striped red squiggle; three empty red squiggle; three solid red squiggle; three striped red squiggle; one empty green squiggle; one solid green squiggle; one striped green squiggle; two empty green squiggle; two solid green squiggle; two striped green squiggle; three empty green squiggle; three solid green squiggle; three striped green squiggle; one empty purple squiggle; one solid purple squiggle; one striped purple squiggle; two empty purple squiggle; two solid purple squiggle; two striped purple squiggle; three empty purple squiggle; three solid purple squiggle; three striped purple squiggle
+
