@@ -5,14 +5,17 @@
 
 #%pylab inline
 #import cv
+import sys
 import cv2
 import numpy as np
 #import matplotlib.pyplot as plt
 #import matplotlib.cm as cm
 import math
 import card_finder
-import sys
+from memoize import memoized
 
+from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsClassifier
 # <codecell>
 
 NUMBER, SHADING, COLOR, SHAPE = 0, 1, 2, 3
@@ -28,23 +31,32 @@ NUMBER, SHADING, COLOR, SHAPE = 0, 1, 2, 3
 # Data
 
 # <codecell>
+class Classifier():
+    def __init__(self):
+        self.number_clf = SVC()
+        self.shading_clf = SVC()
+        self.color_clf = SVC()
+        self.shape_clf = SVC()
+
+    def fit(self, X, Y):
+        for card, labels in zip(X, Y):
+            card.known_number = labels[NUMBER]
+
+        number_features = [card.number_features() for card in X]
+        shading_features = [card.shading_features() for card in X]
+        color_features = [card.color_features() for card in X]
+        shape_features = [card.shape_features() for card in X]
+
+        self.number_clf.fit(number_features, Y[:,NUMBER])
+        self.shading_clf.fit(shading_features, Y[:,SHADING])
+        self.color_clf.fit(color_features, Y[:,COLOR])
+        self.shape_clf.fit(shape_features, Y[:,SHAPE])
 
 class Card():
     def __init__(self, image):
         self.image = image  # already rectified
 
-        self.number = None
-        self.shading = None
-        self.color = None
-        self.shape = None
-
-        self.grayimage = None
-        self.edgesimage = None
-        self.hsvimage = None
-        self.centerpt = None
-        self.distlist = None
-
-        self.shape_pred = None
+        self.known_number = None
 
     def opencv_show(self):
         cv2.destroyWindow('card_window')
@@ -52,59 +64,56 @@ class Card():
 
     def opencv_show_canny(self):
         cv2.destroyWindow('canny_window')
-        cv2.imshow('canny_window', self.edgesimage)
+        cv2.imshow('canny_window', self.edges())
         cv2.moveWindow('canny_window', 400, 0)
-        
+
+    @memoized
     def gray(self):
-        if self.grayimage is None:
-            self.grayimage = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
-        return self.grayimage
+        return cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
 
+    @memoized
     def edges(self):
-        if self.edgesimage is None:
-            self.edgesimage = cv2.Canny(self.gray(), 404/2, 156/2, apertureSize=3)
-        return self.edgesimage
+        return cv2.Canny(self.gray(), 404/2, 156/2, apertureSize=3)
 
+    @memoized
     def hsv(self):
-        if self.hsvimage is None:
-            self.hsvimage = cv2.cvtColor(self.image, cv2.COLOR_BGR2HSV)
-        return self.hsvimage
+        return cv2.cvtColor(self.image, cv2.COLOR_BGR2HSV)
 
+    @memoized
     def center(self):
-        if self.centerpt is None:
-            number = 2 if self.predict_number() == "two" else 1
-            self.centerpt = find_center(self.edges(), number)
-        return self.centerpt
+        number = 2 if self.predict_number() == "two" else 1
+        return find_center(self.edges(), number)
 
     def fail(self):
         if 'fail' in self.labels():
             return True
-            
+
 
         return False
 
     def labels(self):
         return [self.predict_number(), self.predict_shading(), self.predict_color(), self.predict_shape()]
 
+    @memoized
     def dists(self):
-        if self.distlist is None:
-            canny = self.edges()
-            center = self.center()
-            dists = dists_to_edges(canny, center)
-            for i in range(len(dists)):
-                dists[i] = dists[i]**3
-            denom = np.linalg.norm(dists)
-            if denom != 0:
-                self.distlist = dists / denom
-            else:
-                self.distlist = dists
-        return self.distlist
+        canny = self.edges()
+        center = self.center()
+        dists = dists_to_edges(canny, center)
+        for i in range(len(dists)):
+            dists[i] = dists[i]**3
+        denom = np.linalg.norm(dists)
+        if denom != 0:
+            return dists / denom
+        else:
+            return dists
 
-    def predict_number(self):
-        if self.number is None:
-            edges = self.edges()
-            height, width = edges.shape
-            x = width / 2
+    @memoized
+    def number_features(self):
+        edges = self.edges()
+        height, width = edges.shape
+        xs = [width / 2]
+        features = []
+        for x in xs:
             count = 0
             waiting = 0
             for y in range(5, height-5):
@@ -113,139 +122,266 @@ class Card():
                     count = count + 1
                 waiting = waiting - 1
 
-            count = count / 2
-            if count == 1:
-                self.number = "one"
-            elif count == 2:
-                self.number = "two"
-            elif count == 3:
-                self.number = "three"
-            else:
-                self.number = "fail"
-        return self.number
+            features.append(count)
+
+        return features
+
+    @memoized
+    def predict_number(self):
+        return self.known_number or CLASSIFIER.number_clf.predict(self.number_features())[0]
+
+    @memoized
+    def predict_number_old(self):
+        edges = self.edges()
+        height, width = edges.shape
+        x = width / 2
+        count = 0
+        waiting = 0
+        for y in range(5, height-5):
+            if edges[y][x] > 0 and waiting <= 0:
+                waiting = 10
+                count = count + 1
+            waiting = waiting - 1
+
+        count = count / 2
+        if count == 1:
+            return "one"
+        elif count == 2:
+            return "two"
+        elif count == 3:
+            return "three"
+        else:
+            return "fail"
 
     # <codecell>
 
+    @memoized
+    def shading_features(self):
+        gray = self.gray()
+        edges = cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
+        height, width = gray.shape
+
+        tc = (10,50) # topcenter row,col
+        white = np.mean(gray[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2])
+
+        center = self.center()
+
+        ws = 2 # window size
+        window = gray[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws]
+        avg_color = np.mean(window)
+
+        ratio = avg_color / white
+        return [ratio, avg_color, white]
+
+
+    @memoized
     def predict_shading(self):
-        if self.shading is None:
-            gray = self.gray()
-            edges = cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
-            number = self.number
-            height, width = gray.shape
+        return CLASSIFIER.shading_clf.predict(self.shading_features())[0]
 
-            tc = (10,50) # topcenter row,col
-            white = np.mean(gray[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2])
+    @memoized
+    def predict_shading_old(self):
+        gray = self.gray()
+        edges = cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
+        number = self.predict_number()
+        height, width = gray.shape
 
-            center = self.center()
+        tc = (10,50) # topcenter row,col
+        white = np.mean(gray[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2])
 
-            ws = 2 # window size
-            window = gray[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws]
-            avg_color = np.mean(window)
+        center = self.center()
 
-            ratio = avg_color / white
-            if ratio < .6:
-                self.shading = 'solid'
-            elif ratio < .95:
-                self.shading = 'striped'
-            else:
-                self.shading = 'empty'
-        return self.shading
+        ws = 2 # window size
+        window = gray[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws]
+        avg_color = np.mean(window)
 
-    # <codecell>
-
-    def predict_color(self, flag=False):
-        if self.color is None:
-            gray = self.gray()
-            edges = self.edges() #cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
-            image = self.hsv()
-
-            # Assumes rectified image
-            height, width = edges.shape
-            x = width / 2
-
-            # weird HSV
-
-            RED = np.array([2, 224, 189])
-            GREEN = np.array([70, 240, 105])
-            PURPLE = np.array([166, 207, 79])
-
-            # HSV
-            """
-            RED = np.array([5, 88, 74])
-            GREEN = np.array([141, 94, 41])
-            PURPLE = np.array([293, 81, 31])
-            """
-            colors = [RED, GREEN, PURPLE]
-            color_names = ["red", "green", "purple"]
-            color_counts = np.array([0, 0, 0])
-            for x in range(width/2-10, width/2+10, 4):
-
-                inside = False
-                ever_switch = False
-                beginning = True
-                beg_count = 0
-                beg_color = np.array([0, 0, 0])
-                color_counts_before = color_counts.copy()
-                for y in range(5, height-5):
-                    if edges[y, x] > 0:
-                        if beginning and beg_count != 0:
-                            beg_color /= beg_count
-                        if flag:
-                            print 'beg_color', beg_color
-                        beginning = False
-                        inside = not inside
-                        ever_switch = True
-
-                    if beginning:
-                        beg_count += 1
-                        beg_color += image[y,x]
-
-
-                    if inside:
-                        color = np.array(image[y,x])
-                        if flag:
-                            print color
-
-                        if np.linalg.norm(color-beg_color, ord=1) < 60:
-                            continue
-                        """
-                        if color[0] <= 20 or 165 <= color[0]:
-                            color_counts[0] += 1
-                        if 30 <= color[0] <= 90:
-                            color_counts[1] += 1
-                        if 100 <= color[0] <= 165:
-                            color_counts[2] += 1
-                        """
-                        dists = []
-                        for c in colors:
-                            d1 = abs(c[0]-color[0])
-                            d2 = abs(c[0]+180-color[0])
-                            dists.append(min(d1,d2))
-                        if np.min(dists) < 25:
-                            color_counts[np.argmin(dists)] += 1
-                if not ever_switch or inside:
-                    color_counts = color_counts_before
-
-            self.color = color_names[np.argmax(color_counts)]
-        return self.color
+        ratio = avg_color / white
+        if ratio < .6:
+            return 'solid'
+        elif ratio < .95:
+            return 'striped'
+        else:
+            return 'empty'
 
     # <codecell>
 
+    @memoized
+    def color_features(self, flag=False):
+        gray = self.gray()
+        edges = self.edges() #cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
+        image = self.hsv()
+
+        # Assumes rectified image
+        height, width = edges.shape
+        x = width / 2
+
+        # weird HSV
+
+        RED = np.array([2, 224, 189])
+        GREEN = np.array([70, 240, 105])
+        PURPLE = np.array([166, 207, 79])
+
+        # HSV
+        """
+        RED = np.array([5, 88, 74])
+        GREEN = np.array([141, 94, 41])
+        PURPLE = np.array([293, 81, 31])
+        """
+        colors = [RED, GREEN, PURPLE]
+        color_names = ["red", "green", "purple"]
+        color_counts = np.array([0, 0, 0])
+        for x in range(width/2-10, width/2+10, 4):
+
+            inside = False
+            ever_switch = False
+            beginning = True
+            beg_count = 0
+            beg_color = np.array([0, 0, 0])
+            color_counts_before = color_counts.copy()
+            for y in range(5, height-5):
+                if edges[y, x] > 0:
+                    if beginning and beg_count != 0:
+                        beg_color /= beg_count
+                    if flag:
+                        print 'beg_color', beg_color
+                    beginning = False
+                    inside = not inside
+                    ever_switch = True
+
+                if beginning:
+                    beg_count += 1
+                    beg_color += image[y,x]
+
+
+                if inside:
+                    color = np.array(image[y,x])
+                    if flag:
+                        print color
+
+                    if np.linalg.norm(color-beg_color, ord=1) < 60:
+                        continue
+                    """
+                    if color[0] <= 20 or 165 <= color[0]:
+                        color_counts[0] += 1
+                    if 30 <= color[0] <= 90:
+                        color_counts[1] += 1
+                    if 100 <= color[0] <= 165:
+                        color_counts[2] += 1
+                    """
+                    dists = []
+                    for c in colors:
+                        d1 = abs(c[0]-color[0])
+                        d2 = abs(c[0]+180-color[0])
+                        dists.append(min(d1,d2))
+                    if np.min(dists) < 25:
+                        color_counts[np.argmin(dists)] += 1
+            if not ever_switch or inside:
+                color_counts = color_counts_before
+        return color_counts
+
+
+    @memoized
+    def predict_color(self):
+        return CLASSIFIER.color_clf.predict(self.color_features())[0]
+
+    @memoized
+    def predict_color_old(self, flag=False):
+        gray = self.gray()
+        edges = self.edges() #cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
+        image = self.hsv()
+
+        # Assumes rectified image
+        height, width = edges.shape
+        x = width / 2
+
+        # weird HSV
+
+        RED = np.array([2, 224, 189])
+        GREEN = np.array([70, 240, 105])
+        PURPLE = np.array([166, 207, 79])
+
+        # HSV
+        """
+        RED = np.array([5, 88, 74])
+        GREEN = np.array([141, 94, 41])
+        PURPLE = np.array([293, 81, 31])
+        """
+        colors = [RED, GREEN, PURPLE]
+        color_names = ["red", "green", "purple"]
+        color_counts = np.array([0, 0, 0])
+        for x in range(width/2-10, width/2+10, 4):
+
+            inside = False
+            ever_switch = False
+            beginning = True
+            beg_count = 0
+            beg_color = np.array([0, 0, 0])
+            color_counts_before = color_counts.copy()
+            for y in range(5, height-5):
+                if edges[y, x] > 0:
+                    if beginning and beg_count != 0:
+                        beg_color /= beg_count
+                    if flag:
+                        print 'beg_color', beg_color
+                    beginning = False
+                    inside = not inside
+                    ever_switch = True
+
+                if beginning:
+                    beg_count += 1
+                    beg_color += image[y,x]
+
+
+                if inside:
+                    color = np.array(image[y,x])
+                    if flag:
+                        print color
+
+                    if np.linalg.norm(color-beg_color, ord=1) < 60:
+                        continue
+                    """
+                    if color[0] <= 20 or 165 <= color[0]:
+                        color_counts[0] += 1
+                    if 30 <= color[0] <= 90:
+                        color_counts[1] += 1
+                    if 100 <= color[0] <= 165:
+                        color_counts[2] += 1
+                    """
+                    dists = []
+                    for c in colors:
+                        d1 = abs(c[0]-color[0])
+                        d2 = abs(c[0]+180-color[0])
+                        dists.append(min(d1,d2))
+                    if np.min(dists) < 25:
+                        color_counts[np.argmin(dists)] += 1
+            if not ever_switch or inside:
+                color_counts = color_counts_before
+
+        return color_names[np.argmax(color_counts)]
+
+    # <codecell>
+
+    @memoized
+    def shape_features(self):
+        return self.dists()
+
+
+    @memoized
     def predict_shape(self):
-        if self.shape is None:
-            dists = self.dists()
+        return CLASSIFIER.shape_clf.predict(self.shape_features())[0]
 
-            shape_distlists = [c.dists() for c in [diamondcard, squigglecard, rectanglecard]]
-            sims = [similarity(dists, distlist) for distlist in shape_distlists]
+    @memoized
+    def predict_shape_old(self):
+        dists = self.dists()
 
-            if np.max(sims) < .5:
-                self.shape = 'fail'
-            else:
-                shapes = ["diamond", "squiggle", "rounded-rectangle"]
-                self.shape = shapes[np.argmax(sims)]
-                self.shape_pred = sims
+        shape_distlists = [c.dists() for c in [diamondcard, squigglecard, rectanglecard]]
+        sims = [similarity(dists, distlist) for distlist in shape_distlists]
 
-        return self.shape
+        if np.max(sims) < .5:
+            return 'fail'
+        else:
+            shapes = ["diamond", "squiggle", "rounded-rectangle"]
+            shape = shapes[np.argmax(sims)]
+            return shape
 
 
 
@@ -375,7 +511,6 @@ def gen_data(filename):
 
 # <codecell>
 
-
 # <codecell>
 
 # TODO(Bieber): Index to speed up finding particular cards
@@ -414,10 +549,10 @@ def test_cards():
         card.predict_color()
         card.predict_shape()
 
-        numberok = card.number == labels[NUMBER]
-        shadingok = card.shading == labels[SHADING]
-        colorok = card.color == labels[COLOR]
-        shapeok = card.shape == labels[SHAPE]
+        numberok = card.predict_number() == labels[NUMBER]
+        shadingok = card.predict_shading() == labels[SHADING]
+        colorok = card.predict_color() == labels[COLOR]
+        shapeok = card.predict_shape() == labels[SHAPE]
 
         if not shadingok:
             gray = card.gray().copy()
@@ -462,7 +597,9 @@ def main():
             if not card.fail():
                 cards.append(card)
 
-        print set(' '.join(c.labels()) for c in cards)
+        print len(cards)
+        for card in cards:
+            print card.labels()
 
         image = mark_quads(frame, quads)
         cv2.imshow('win', image)
@@ -480,7 +617,6 @@ def main():
                     looking_at = len(cards) - 1
                 cards[looking_at].opencv_show()
                 cards[looking_at].opencv_show_canny()
-                print cards[looking_at].shape_pred
                 print ' '.join(cards[looking_at].labels())
 
             if key == ord('n'):
@@ -489,9 +625,8 @@ def main():
                     looking_at = 0
                 cards[looking_at].opencv_show()
                 cards[looking_at].opencv_show_canny()
-                print cards[looking_at].shape_pred
                 print ' '.join(cards[looking_at].labels())
-            
+
             if key == 27: # exit on ESC
                 sys.exit(0)
 
@@ -510,18 +645,17 @@ def main():
             rval, frame = vc.read()
         else:
             rval = False
+
         while True:
-
+            rval, frame = vc.read()
             key = cv2.waitKey(10)
-            if key == 27: # exit on ESC
-                break
-
             if frame is None:
                 continue
+            else:
+                display(frame)
 
-            display(frame)
-            rval, frame = vc.read()
-
+            if key == 27: # exit on ESC
+                break
 
 
 """
@@ -567,6 +701,8 @@ if __name__ == '__main__':
     rectanglecard = exampleofcard(SHAPE, "rounded-rectangle")
     squigglecard = exampleofcard(SHAPE, "squiggle")
 
-    main()
+    CLASSIFIER = Classifier()
+    CLASSIFIER.fit(trainX, trainY)
 
+    main()
 
