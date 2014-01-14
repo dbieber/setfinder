@@ -5,6 +5,8 @@ import numpy as np
 from sets import Set
 import copy
 import sys
+import setfinder
+import networkx as nx
 
 """
 cv2.namedWindow("w1", cv.CV_WINDOW_AUTOSIZE)
@@ -402,17 +404,32 @@ def reduce_quads(quads):
             final_quads.append(q)
     return final_quads
 
+def rotate_quads(quads):
+    index = 0
+    for q in quads:
+        if np.linalg.norm(q[0] - q[1]) > np.linalg.norm(q[1] - q[2]):
+            q2 = []
+            for p in q[1:]:
+                q2.append(p)
+            q2.append(q[0])
+            quads[index] = np.array(q2)
+        index += 1
+    return quads
+
 def find_cards(img1, rho, theta, threshold, minLineLength, maxLineGap):
 
     # Do initial openCV processing
 
+    #img1 = cv2.fastNlMeansDenoisingColored(img1,None,10,10,7,21)
     gray = cv2.cvtColor(img1,cv2.COLOR_BGR2GRAY)
+    #clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    #gray = clahe.apply(gray)
     sobelx = cv2.Sobel(gray,cv2.CV_64F,1,0,ksize=5)
     sobely = cv2.Sobel(gray,cv2.CV_64F,0,1,ksize=5)
 
-    gray = cv2.blur(gray, (3, 3))
-    edges = cv2.Canny(gray, 404/3, 156/3, apertureSize=3)
-    #cv2.imshow('edges', edges)
+    #gray = cv2.blur(gray, (3, 3))
+    edges = cv2.Canny(gray, 404/2, 156/2, apertureSize=3)
+    cv2.imshow('edges', edges)
     lines = cv2.HoughLinesP(edges,rho, theta, threshold, minLineLength=minLineLength, maxLineGap=maxLineGap)
     if lines is None:
         return []
@@ -440,6 +457,160 @@ def find_cards_with_parameter_setting(img1, i):
 
     p = parameters[i]
     return find_cards(img1, p[0], np.pi/p[1], p[2], p[3], p[4])
+
+def new_card_finder(image):
+
+    quads = []
+
+    gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+    #clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    #gray = clahe.apply(gray)
+    sobelx = cv2.Sobel(gray,cv2.CV_64F,1,0,ksize=5)
+    sobely = cv2.Sobel(gray,cv2.CV_64F,0,1,ksize=5)
+
+    #gray = cv2.blur(gray, (3, 3))
+    edges = cv2.Canny(gray, 404/2, 156/2, apertureSize=3)
+    #cv2.imshow('edges', edges)
+
+    height, width = edges.shape
+    def convert_to_flatened_index(i, j):
+        return i * width + j
+
+    def convert_from_flatened_index(index):
+        return (index / width, index % width)
+
+    def make_graph(edges):
+        G = nx.Graph()
+        index = 0
+        for i in range(height):
+            for j in range(width):
+                if edges[i, j] > 1:
+                    flag = True
+                    bounds = 1
+                    while flag and bounds < 3:
+                        for k in range(-bounds, bounds+1):
+                            for l in range(-bounds, bounds+1):
+                                if abs(k) == bounds or abs(l) == bounds:
+                                    if 0 <= i + k < height and 0 <= j + l < width and edges[i+k, j+l] > 0:
+                                        index2 = convert_to_flatened_index(i+k, j+l)
+                                        flag = False
+                                        G.add_edge(index, index2)
+                        bounds = bounds + 1
+                index = index + 1
+        return G
+
+    connected_edges = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
+
+    G = make_graph(edges)
+    comps = nx.connected_component_subgraphs(G)
+
+
+    # TODO Remove if first and last node aren't adjacent
+    for g in comps:
+        if g.number_of_nodes() > 200:
+            """
+            for index in g.nodes_iter():
+                (i, j) = convert_from_flatened_index(index)
+                connected_edges[i, j] = [100, 50, 0]
+            """
+
+            nodes = g.nodes()
+            use_node = None
+            for try_index in range(0, 20, 5):
+                if try_index < len(nodes):
+                    node1 = g.nodes()[try_index]
+                    neighbors = g.neighbors(node1)
+                    if len(neighbors) == 2:
+                        use_node = neighbors[0]
+                        g.remove_edge(node1, use_node)
+                        break
+
+            #tree = nx.dfs_tree(g, g.nodes()[0])
+            #nodes = nx.topological_sort(tree)
+            if use_node is None:
+                continue
+            try:
+                nodes = nx.shortest_path(g, node1, use_node)
+            except nx.NetworkXNoPath:
+                continue
+
+
+            search_length = 5
+            length = len(nodes)
+                
+
+            def find_nearby_dot(i):
+                y, x = convert_from_flatened_index(nodes[i])
+                index1 = (i + search_length) % length
+                index2 = (i - search_length + length) % length
+                y1, x1 = convert_from_flatened_index(nodes[index1])
+                y2, x2 = convert_from_flatened_index(nodes[index2])
+                v1 = np.array([x - x1, y - y1])
+                v2 = np.array([x2 - x, y2 - y])
+                return abs(np.dot(v1, v2)/(np.linalg.norm(v1)*np.linalg.norm(v2)))
+
+            corners = []
+            i = 0
+            dot_threshold = .9
+            while i < length: 
+                mindot = find_nearby_dot(i)
+                if 0 < mindot < dot_threshold:
+                    minindex = i
+                    vote = 0
+                    for j in range(-search_length, search_length):
+                        index = (i + j + length) % length
+                        dot = find_nearby_dot(index)
+                        if 0 < dot < dot_threshold:
+                            vote += 1
+                        if dot < mindot:
+                            mindot = dot
+                            minindex = index
+                    if vote > search_length/4:
+                        if i < 20:
+                            length -= (20-i)
+                        y, x = convert_from_flatened_index(nodes[minindex])
+                        corners.append((x, y))
+                        i += 20
+                i += 1
+            if len(corners) == 4:
+                quads.append(corners)
+                """
+                for c in corners:
+                    cv2.circle(connected_edges, c, 3, (250, 50, 0), thickness=-1)
+                """
+    """
+    cv2.imshow('connected_edges', connected_edges)
+    cv2.waitKey(0)
+    """
+    quads = reduce_quads(quads)
+    return quads
+
+def test_card_finder():
+    image = cv2.imread(sys.argv[1])
+    image = cv2.resize(image, (640,480))
+    quads = []
+    quads.extend(new_card_finder(image))
+    #for i in range(0, 1):
+    #    quads.extend(find_cards_with_parameter_setting(image, i))
+
+    quads = reduce_quads(quads)
+    quads = rotate_quads(quads)
+    cards = []
+    """
+    for q in quads:
+        card = Card(rectify(image, q))
+        if not card.fail():
+            cards.append(card)
+
+    print set(' '.join(c.labels()) for c in cards)
+    """
+
+    image = setfinder.mark_quads(image, quads)
+    cv2.imshow('win', image)
+    cv2.waitKey(0)
+
+if __name__ == '__main__':
+    test_card_finder()
 
 """
 card_file = '../data/input_images/'+str(sys.argv[1])+'.jpg'
