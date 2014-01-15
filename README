@@ -1,0 +1,4 @@
+setfinder.py takes pictures using your webcam and identifies Sets.
+generate_data.py allows you to create labeled images of Sets using your webcam
+playground is a folder full of experimental code
+data is a folder containing our labeled images

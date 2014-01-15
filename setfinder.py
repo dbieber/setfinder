@@ -62,6 +62,39 @@ class Card():
 
         self.known_number = None
 
+    def opencv_show_detailed(self):
+        pos = 0
+
+        image = self.image.copy()
+        cv2.circle(image, self.center(), 1, 255)
+        cv2.destroyWindow('image0')
+        cv2.imshow('image0', image)
+        cv2.moveWindow('image0', pos, 0)
+        pos += 150
+
+        cv2.destroyWindow('edges')
+        cv2.imshow('edges', self.edges())
+        cv2.moveWindow('edges', pos, 0)
+        pos += 150
+
+        blur = cv2.blur(self.gray(), ksize=(5,5))
+        cv2.destroyWindow('blur')
+        cv2.imshow('blur', blur)
+        cv2.moveWindow('blur', pos, 0)
+        pos += 150
+
+        for params in [1.5,1,.5,.25]:
+            name = 'blurcanny %f' % params
+            cv2.destroyWindow(name)
+            cv2.imshow(name, cv2.Canny(blur, 404*params, 156*params, apertureSize=3))
+            cv2.moveWindow(name, pos, 0)
+
+            name = 'canny %f' % params
+            cv2.destroyWindow(name)
+            cv2.imshow(name, cv2.Canny(self.gray(), 404*params, 156*params, apertureSize=3))
+            cv2.moveWindow(name, pos, 180)
+            pos += 150
+
     def opencv_show(self):
         cv2.destroyWindow('card_window')
         cv2.imshow('card_window', self.image)
@@ -88,12 +121,20 @@ class Card():
         number = 2 if self.predict_number() == "two" else 1
         return find_center(self.edges(), number)
 
+    @memoized
+    def blurred_canny(self):
+        blur = cv2.blur(self.gray(), ksize=(5,5))
+        canny = cv2.Canny(blur, 404/4, 156/4, apertureSize=3)
+        # cv2.destroyWindow('blur')
+        # cv2.destroyWindow('canny')
+        # cv2.imshow('blur', blur)
+        # cv2.imshow('canny', canny)
+        # cv2.moveWindow('canny', 400, 0)
+        # cv2.waitKey(0)
+        return canny
+
     def fail(self):
-        if 'fail' in self.labels():
-            return True
-
-
-        return False
+        return 'fail' in self.labels()
 
     def labels(self):
         return [self.predict_number(), self.predict_shading(), self.predict_color(), self.predict_shape()]
@@ -106,6 +147,17 @@ class Card():
 
     @memoized
     def number_features(self):
+        edges = self.edges()
+        height, width = edges.shape
+
+        num_rows = []
+        for y in range(5, height-5):
+            num_rows.append(1 if sum(edges[y,5:width-5]) > 0 else 0)
+
+        return num_rows
+
+    @memoized
+    def number_features2(self):
         edges = self.edges()
         height, width = edges.shape
         xs = [width / 2]
@@ -155,7 +207,9 @@ class Card():
     @memoized
     def shading_features(self):
         gray = self.gray()
-        edges = cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
+        edges = self.edges()
+        # edges = self.blurred_canny()
+        # edges = cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
         height, width = gray.shape
         image = self.hsv()
 
@@ -194,7 +248,7 @@ class Card():
         number = self.predict_number()
         height, width = gray.shape
 
-        tc = (10,50) # topcenter row,col
+        tc = (10,10) # topcenter row,col
         white = np.mean(gray[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2])
 
         center = self.center()
@@ -721,15 +775,13 @@ def test(X,Y):
         shapeok = card.predict_shape() == labels[SHAPE]
 
 
-        if not colorok:
+        if not shapeok:
             image = card.image.copy()
-            # cv2.circle(image, card.center(), 1, 255)
-            # cv2.destroyWindow('image')
-            # cv2.imshow('image', image)
-            # print "Predict: ", ' '.join(str(x) for x in card.labels())
-            # print "Actual:  ", ' '.join(labels)
-            # print
-            # cv2.waitKey(0)
+            card.opencv_show_detailed()
+            print "Predict: ", ' '.join(str(x) for x in card.labels())
+            print "Actual:  ", ' '.join(labels)
+            print
+            cv2.waitKey(0)
 
         counts[NUMBER] += numberok
         counts[SHADING] += shadingok
