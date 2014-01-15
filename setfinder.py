@@ -8,8 +8,9 @@
 import sys
 import cv2
 import numpy as np
-#import matplotlib.pyplot as plt
-#import matplotlib.cm as cm
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import pylab as pl
 import math
 import random
 import card_finder
@@ -18,6 +19,7 @@ from memoize import memoized
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import confusion_matrix
 # <codecell>
 
 NUMBER, SHADING, COLOR, SHAPE = 0, 1, 2, 3
@@ -75,7 +77,7 @@ class Card():
 
     @memoized
     def edges(self):
-        return cv2.Canny(self.gray(), 404/2, 156/2, apertureSize=3)
+        return cv2.Canny(self.gray(), 404/4, 156/4, apertureSize=3)
 
     @memoized
     def hsv(self):
@@ -221,10 +223,12 @@ class Card():
         height, width = edges.shape
         x = width / 2
 
-        # lets get the color at the edge
-        # center = self.center()
-        # return colors_at_edges(edges, image, center)
-
+        # ch0 = cv2.calcHist([image], [0], None, [256], [0,256])[:,0]
+        # ch0 = cv2.calcHist([image], [0], None, [256], [0,256])[:,0]
+        # ch0 = cv2.calcHist([image], [0], None, [256], [0,256])[:,0]
+        # h = cv2.calcHist( [image], [0, 1, 2], None, [180, 256, 180], [0, 180, 0, 256, 0, 180] )
+        h = cv2.calcHist( [image], [0, 1, 2], None, [32, 32, 32], [0, 180, 0, 256, 0, 256] )
+        return np.reshape(h, np.prod(h.shape))
         # weird HSV
 
         RED = np.array([2, 224, 189])
@@ -438,6 +442,11 @@ class Card():
 
     @memoized
     def shape_features(self):
+        # sobel = cv2.Sobel(self.gray(), -1, dx=1, dy=1)
+        # cv2.imshow('sobel', sobel)
+        # h = cv2.calcHist([sobel], [0], None, [256], [0,256])[:,0]
+        # # print h
+        # return h
         return self.dists()
 
 
@@ -538,6 +547,7 @@ def similarity(a1,a2):
 
 # <codecell>
 
+CARD_DIMENSIONS = (200*2/3, 280*2/3)
 CARD_DIMENSIONS = (100, 140)
 
 # <codecell>
@@ -633,15 +643,78 @@ def exampleofcard(feature=SHADING, value="empty"):
 
 # <codecell>
 
+def confusion_matrices(testX, testY):
+    pred = [card.predict_number() for card in testX]
+    labels = ["one", "two", "three"]
+    cm = confusion_matrix(testY[:,NUMBER], pred, labels)
+    print(cm)
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    cax = ax.matshow(cm)
+    pl.title('Number Confusion Matrix')
+    fig.colorbar(cax)
+    ax.set_xticklabels([''] + labels)
+    ax.set_yticklabels([''] + labels)
+    pl.xlabel('Predicted')
+    pl.ylabel('True')
+    pl.show()
 
-def test_cards():
-    X, Y = gen_data("data/total_data.txt")
+    pred = [card.predict_shading() for card in testX]
+    labels = ["empty", "striped", "solid"]
+    cm = confusion_matrix(testY[:,SHADING], pred, labels)
+    print(cm)
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    cax = ax.matshow(cm)
+    pl.title('Shading Confusion Matrix')
+    fig.colorbar(cax)
+    ax.set_xticklabels([''] + labels)
+    ax.set_yticklabels([''] + labels)
+    pl.xlabel('Predicted')
+    pl.ylabel('True')
+    pl.show()
 
-    # <codecell>
+    pred = [card.predict_shape() for card in testX]
+    labels = ["rounded-rectangle", "squiggle", "diamond"]
+    cm = confusion_matrix(testY[:,SHAPE], pred, labels)
+    print(cm)
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    cax = ax.matshow(cm)
+    pl.title('Shape Confusion Matrix')
+    fig.colorbar(cax)
+    ax.set_xticklabels([''] + labels)
+    ax.set_yticklabels([''] + labels)
+    pl.xlabel('Predicted')
+    pl.ylabel('True')
+    pl.show()
 
+    pred = [card.predict_color() for card in testX]
+    labels = ["red", "green", "purple"]
+    cm = confusion_matrix(testY[:,COLOR], pred, labels)
+    print(cm)
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    cax = ax.matshow(cm)
+    pl.title('Color Confusion Matrix')
+    fig.colorbar(cax)
+    ax.set_xticklabels([''] + labels)
+    ax.set_yticklabels([''] + labels)
+    pl.xlabel('Predicted')
+    pl.ylabel('True')
+    pl.show()
+
+
+def train(X,Y):
+    print "Training on %d images..." % len(X)
+    CLASSIFIER.fit(X, Y)
+    print "Done training."
+
+def test(X,Y):
     counts = [0] * 5
-    for card, labels in zip(X, Y):
+    print "Testing on %d images..." % len(X)
 
+    for card, labels in zip(X, Y):
         numberok = card.predict_number() == labels[NUMBER]
         shadingok = card.predict_shading() == labels[SHADING]
         colorok = card.predict_color() == labels[COLOR]
@@ -650,24 +723,39 @@ def test_cards():
 
         if not colorok:
             image = card.image.copy()
-            cv2.circle(image, card.center(), 1, 255)
-            cv2.destroyWindow('image')
-            cv2.imshow('image', image)
-            #print "Predict: ", ' '.join(str(x) for x in card.labels())
-            #print "Actual:  ", ' '.join(labels)
-            #print
-            #cv2.waitKey(0)
+            # cv2.circle(image, card.center(), 1, 255)
+            # cv2.destroyWindow('image')
+            # cv2.imshow('image', image)
+            # print "Predict: ", ' '.join(str(x) for x in card.labels())
+            # print "Actual:  ", ' '.join(labels)
+            # print
+            # cv2.waitKey(0)
 
         counts[NUMBER] += numberok
         counts[SHADING] += shadingok
         counts[COLOR] += colorok
         counts[SHAPE] += shapeok
         counts[4] += numberok and shadingok and colorok and shapeok
-    #     print "Predict: ", ' '.join(str(x) for x in card.labels())
-    #     print "Actual:  ", ' '.join(labels)
-    #     print
+    # #     print "Predict: ", ' '.join(str(x) for x in card.labels())
+    # #     print "Actual:  ", ' '.join(labels)
+    # #     print
 
     print counts, len(X)
+
+def test_cards_main():
+    X, Y = gen_data("data/total_data.txt")
+
+    perm = range(len(X))
+    random.shuffle(perm)
+    N = 100
+    trainX = X[perm[:N]]
+    trainY = Y[perm[:N]]
+    testX =  X[perm[N:]]
+    testY =  Y[perm[N:]]
+
+    train(trainX, trainY)
+
+    test(testX, testY)
 
 # <codecell>
 
@@ -793,7 +881,7 @@ cards is an array of three indicies into the quads array
 def mark_set(image, cards, quads):
     for c in cards:
         arr = [np.array(quads[c],'int32')]
-        cv2.polylines(image, arr, True, (0,0,100), thickness=3)
+        cv2.polylines(image, arr, True, (0, 143, 255), thickness=3)
 
     return image
 
@@ -815,22 +903,24 @@ def showcards(X,Y):
         raw_input()
 
 if __name__ == '__main__':
-    trainX, trainY = gen_data("data/total_data.txt")
-
-
-    # showcards(trainX, trainY)
-
-    perm = range(len(trainX))
-    random.shuffle(perm)
-    N = 100
-    trainX = trainX[perm[:N]]
-    trainY = trainY[perm[:N]]
-
-    print "Training on %d images..." % len(trainX)
+    # Global
     CLASSIFIER = Classifier()
-    CLASSIFIER.fit(trainX, trainY)
 
-    #test_cards()
+    run_tests = True
 
-    main()
+    if run_tests:
+        test_cards_main()
+    else:
+        #showcards(trainX, trainY)
+        trainX, trainY = gen_data("data/positive_new_data.txt")
+
+        perm = range(len(trainX))
+        random.shuffle(perm)
+        N = 1000
+        trainX = trainX[perm[:N]]
+        trainY = trainY[perm[:N]]
+
+        train(trainX, trainY)
+
+        main()
 
