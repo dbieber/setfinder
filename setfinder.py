@@ -591,7 +591,8 @@ def colors_at_edges(canny, hsv, point):
 
 def is_edge_at(canny, point):
     # point is x,y
-    window = canny[point[1]-1:point[1]+1,point[0]-1:point[0]+1]
+    y,x = int(point[0]), int(point[1])
+    window = canny[y-1:y+1,x-1:x+1]
     return np.sum(window) > 0
 
 # <codecell>
@@ -781,7 +782,7 @@ def test(X,Y):
             print "Predict: ", ' '.join(str(x) for x in card.labels())
             print "Actual:  ", ' '.join(labels)
             print
-            cv2.waitKey(0)
+            # cv2.waitKey(0)
 
         counts[NUMBER] += numberok
         counts[SHADING] += shadingok
