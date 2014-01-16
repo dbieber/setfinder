@@ -595,7 +595,6 @@ def new_card_finder(image):
         #         v2 = q2-q3
         #         if abs(np.dot(v1, v2))/(np.linalg.norm(v1)*np.linalg.norm(v2)) < .5:
         #             final_quads.append(q)
-        print final_quads
 
         def inside_quad(q, p):
             neg = True
@@ -608,8 +607,6 @@ def new_card_finder(image):
                 v1 = q2-q1
                 v2 = p-q1
                 cross = np.cross(v1, v2)
-                print p,q1,q2,v1,v2,len(q)
-                print "cross " + str(cross)
                 if cross < 0:
                     pos = False
                 if cross > 0:

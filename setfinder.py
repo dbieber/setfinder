@@ -15,6 +15,9 @@ import math
 import random
 import card_finder
 from memoize import memoized
+import threading
+import time
+import subprocess
 
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
@@ -298,16 +301,16 @@ class Card():
         center = self.center()
         window = []
         ws = 5 # window size
-        window.append(np.mean(image[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws, 0]))
-        window.append(np.mean(image[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws, 1]))
-        window.append(np.mean(gray[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws]))
+        window.append(.001 + np.mean(image[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws, 0]))
+        window.append(.001 + np.mean(image[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws, 1]))
+        window.append(.001 + np.mean(gray[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws]))
 
         for tc in self.shading_params: # topcenter row,col
             white = []
 
-            white.append(np.mean(image[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2,0]))
-            white.append(np.mean(image[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2,1]))
-            white.append(np.mean(gray[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2]))
+            white.append(.001 + np.mean(image[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2,0]))
+            white.append(.001 + np.mean(image[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2,1]))
+            white.append(.001 + np.mean(gray[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2]))
 
             ratio = np.array(white)/np.array(window)
 
@@ -967,7 +970,6 @@ def test_cards_main():
 # <codecell>
 
 def main():
-
     def display(frame):
         looking_at = 0
 
@@ -989,7 +991,7 @@ def main():
         print ', '.join(' '.join(card.labels()) for card in cards)
 
         sets = calc_sets(cards)
-        if not sets is None:
+        if sets is not None:
             image = mark_set(frame, sets, quads)
         else:
             image = mark_quads(frame, quads)
@@ -1052,6 +1054,96 @@ def main():
             if key == 27: # exit on ESC
                 break
 
+class PredictionThread(threading.Thread):
+    def __init__(self, image):
+        threading.Thread.__init__(self)
+        self.image = image.copy()
+        self.done = False
+        self.cards = None
+        self.sets = None
+        self.quads = None
+
+    def run(self):
+        frame = self.image
+        quads = card_finder.new_card_finder(frame)
+        quads = card_finder.rotate_quads(quads)
+        self.quads = quads
+        self.cards = []
+        for q in quads:
+            card = Card(rectify(frame, q))
+            if not card.fail():
+                self.cards.append(card)
+
+        self.sets = calc_sets(self.cards)
+        self.done = True
+
+class VideoDemo():
+    def __init__(self):
+        self.vc = cv2.VideoCapture(0)
+        cv2.namedWindow('win', cv2.CV_WINDOW_AUTOSIZE)
+
+        self.PredictionThread = None
+
+        if self.vc.isOpened(): # try to get the first frame
+            self.vc.read()
+
+    def run(self):
+        readyForNext = True
+
+        lastcards = None
+        lastset = None # indices into lastcards
+        lastquads = None
+
+        while True:
+            rval, frame = self.vc.read()
+            key = cv2.waitKey(10)
+            time.sleep(.1)
+            if frame is None:
+                continue
+            else:
+                framecopy = frame.copy()
+                framecopy = cv2.resize(framecopy, (framecopy.shape[1]/2, framecopy.shape[0]/2))
+
+                if readyForNext:
+                    readyForNext = False
+                    self.PredictionThread = PredictionThread(framecopy)
+                    self.PredictionThread.start()
+
+                if self.PredictionThread and self.PredictionThread.done:
+                    if self.PredictionThread.sets:
+                        newset = []
+                        keepold = False
+                        if lastset:
+                            keepold = True
+                            for ci in lastset:
+                                carddesired = lastcards[ci]
+                                cardfound = False
+                                for i, card in enumerate(self.PredictionThread.cards):
+                                    if carddesired.labels() == card.labels():
+                                        cardfound = True
+                                        newset.append(i)
+                                        break
+                                if not cardfound:
+                                    keepold = False
+                                    break
+                        if keepold and False:
+                            lastset = newset
+                        else:
+                            lastset = self.PredictionThread.sets
+                            subprocess.call(["say", "set"])
+
+                        lastcards = self.PredictionThread.cards
+                        lastquads = self.PredictionThread.quads
+
+                    readyForNext = True
+
+                if lastset:
+                    mark_set(framecopy, lastset, lastquads)
+
+                cv2.imshow('win', framecopy)
+
+            if key == 27: # exit on ESC
+                sys.exit(0)
 
 """
  A card_list should contain at least four entries for every card.
@@ -1131,5 +1223,5 @@ if __name__ == '__main__':
 
         train(trainX, trainY)
 
-        main()
-
+        demo = VideoDemo()
+        demo.run()
