@@ -23,6 +23,7 @@ from sklearn.metrics import confusion_matrix
 # <codecell>
 
 NUMBER, SHADING, COLOR, SHAPE = 0, 1, 2, 3
+CARD_DIMENSIONS = (100, 140)  # x,y
 
 # <headingcell level=1>
 
@@ -59,40 +60,82 @@ class Classifier():
 class Card():
     def __init__(self, image):
         self.image = image  # already rectified
-
+        self.params = [0.0625, .125, .3, .5, .75, 1]
+        self.shading_params = [(50,6), (20, 6), (80, 6)]
         self.known_number = None
+
+    def opencv_show_detailed_shading(self):
+
+        image = self.image.copy()
+
+        for tc in self.shading_params: # topcenter row,col
+            cv2.rectangle(image, (tc[1]-2, tc[0]-2), (tc[1]+2, tc[0]+2), (200, 100, 0))
+
+        center = self.center()
+
+        ws = 2 # window size
+        cv2.rectangle(image, (center[0]-ws, center[1]-ws), (center[0]+ws, center[1]+ws), (200, 100, 0))
+
+        name = 'image'
+        center = self.center()
+        cv2.destroyWindow(name)
+        cv2.imshow(name, image)
+        cv2.moveWindow(name, 0, 0)
+
+
 
     def opencv_show_detailed(self):
         pos = 0
 
         image = self.image.copy()
-        cv2.circle(image, self.center(), 1, 255)
-        cv2.destroyWindow('image0')
-        cv2.imshow('image0', image)
-        cv2.moveWindow('image0', pos, 0)
+        name = 'image'
+        cv2.destroyWindow(name)
+        cv2.imshow(name, image)
+        cv2.moveWindow(name, pos, 0)
         pos += 150
 
-        cv2.destroyWindow('edges')
-        cv2.imshow('edges', self.edges())
-        cv2.moveWindow('edges', pos, 0)
+        name = 'edges: %d %d %d' % cannyrows(self.edges())
+        edgesimage = self.edges().copy()
+        cv2.circle(edgesimage, self.center(), 1, 255)
+        cv2.destroyWindow(name)
+        cv2.imshow(name, edgesimage)
+        cv2.moveWindow(name, pos, 0)
         pos += 150
 
-        blur = cv2.blur(self.gray(), ksize=(5,5))
-        cv2.destroyWindow('blur')
-        cv2.imshow('blur', blur)
-        cv2.moveWindow('blur', pos, 0)
+        blur = cv2.blur(self.gray(), ksize=(4,4))
+        name = 'blur'
+        cv2.destroyWindow(name)
+        cv2.imshow(name, blur)
+        cv2.moveWindow(name, pos, 0)
+
+        blur2 = cv2.blur(self.gray(), ksize=(6,6))
+        name = 'blur2'
+        cv2.destroyWindow(name)
+        cv2.imshow(name, blur)
+        cv2.moveWindow(name, pos, 200)
         pos += 150
 
-        for params in [1.5,1,.5,.25]:
-            name = 'blurcanny %f' % params
+        for p in self.params:
+            canny = cv2.Canny(blur, 404*p, 156*p, apertureSize=3)
+            r1,r2,r3 = cannyrows(canny)
+            name = 'bc %.3f %d %d %d' % (p, r1,r2,r3)
             cv2.destroyWindow(name)
-            cv2.imshow(name, cv2.Canny(blur, 404*params, 156*params, apertureSize=3))
+            cv2.imshow(name, canny)
             cv2.moveWindow(name, pos, 0)
 
-            name = 'canny %f' % params
+            canny = cv2.Canny(blur2, 404*p, 156*p, apertureSize=3)
+            r1,r2,r3 = cannyrows(canny)
+            name = 'bc2 %.3f %d %d %d' % (p, r1,r2,r3)
             cv2.destroyWindow(name)
-            cv2.imshow(name, cv2.Canny(self.gray(), 404*params, 156*params, apertureSize=3))
-            cv2.moveWindow(name, pos, 180)
+            cv2.imshow(name, cv2.Canny(blur2, 404*p, 156*p, apertureSize=3))
+            cv2.moveWindow(name, pos, 200)
+
+            canny = cv2.Canny(self.gray(), 404*p, 156*p, apertureSize=3)
+            r1,r2,r3 = cannyrows(canny)
+            name = 'c %.3f %d %d %d' % (p, r1,r2,r3)
+            cv2.destroyWindow(name)
+            cv2.imshow(name, cv2.Canny(self.gray(), 404*p, 156*p, apertureSize=3))
+            cv2.moveWindow(name, pos, 400)
             pos += 150
 
     def opencv_show(self):
@@ -110,6 +153,8 @@ class Card():
 
     @memoized
     def edges(self):
+        return self.best_canny()
+        return self.blurred_canny()
         return cv2.Canny(self.gray(), 404/4, 156/4, apertureSize=3)
 
     @memoized
@@ -123,15 +168,49 @@ class Card():
 
     @memoized
     def blurred_canny(self):
-        blur = cv2.blur(self.gray(), ksize=(5,5))
-        canny = cv2.Canny(blur, 404/4, 156/4, apertureSize=3)
-        # cv2.destroyWindow('blur')
-        # cv2.destroyWindow('canny')
-        # cv2.imshow('blur', blur)
-        # cv2.imshow('canny', canny)
-        # cv2.moveWindow('canny', 400, 0)
-        # cv2.waitKey(0)
+        blur = cv2.blur(self.gray(), ksize=(4,4))
+        canny = cv2.Canny(blur, 404/8, 156/8, apertureSize=3)
         return canny
+
+    @memoized
+    def best_canny(self):
+
+        blur = cv2.blur(self.gray(), ksize=(4,4))
+        # prevgood, prevbad = 0, 1000
+        for i, p in enumerate(self.params):
+            canny = cv2.Canny(blur, 404*p, 156*p, apertureSize=3)
+            number = self.predict_number_old(canny)
+            if number == "fail":
+                # print self.predict_number_old(canny, verbose=True)
+                continue
+            else:
+                # print number
+                break
+
+            # good_rows, bad_rows, maxconsecgoodrows = cannyrows(canny)
+
+            # if (good_rows < prevgood and bad_rows >= prevbad) or (good_rows == 0 and prevgood != 0):
+            #     # if not getting better, return the previous image
+            #     p = self.params[i-1]
+            #     return cv2.Canny(blur, 404*p, 156*p, apertureSize=3)
+
+            # # if  good_rows < prevgood * .85 and (bad_rows == 0 or bad_rows >= .85 * prevbad):
+            # #     # if we lose a lot of good rows and not many bad rows, maybe we lost a whole shape!
+            # #     p = self.params[i-1]
+            # #     return cv2.Canny(blur, 404*p, 156*p, apertureSize=3)
+
+            # if bad_rows == 0:
+            #     break
+
+
+            # prevgood, prevbad = good_rows, bad_rows
+
+            # TODO(Bieber): Try with and without this
+            # if good_rows > 10 and bad_rows < 5:
+            #     break
+
+        return canny
+
 
     def fail(self):
         return 'fail' in self.labels()
@@ -140,13 +219,14 @@ class Card():
         return [self.predict_number(), self.predict_shading(), self.predict_color(), self.predict_shape()]
 
     @memoized
-    def dists(self):
-        canny = self.edges()
+    def dists(self, canny = None):
+        if canny is None:
+            canny = self.edges()
         center = self.center()
         return dists_to_edges(canny, center)
 
     @memoized
-    def number_features(self):
+    def number_features2(self):
         edges = self.edges()
         height, width = edges.shape
 
@@ -157,16 +237,16 @@ class Card():
         return num_rows
 
     @memoized
-    def number_features2(self):
+    def number_features(self):
         edges = self.edges()
         height, width = edges.shape
-        xs = [width / 2]
+        xs = [width / 2 + 5]
         features = []
         for x in xs:
             count = 0
             waiting = 0
             for y in range(5, height-5):
-                if edges[y][x] > 0 and waiting <= 0:
+                if edges[y,x] > 0 and waiting <= 0:
                     waiting = 10
                     count = count + 1
                 waiting = waiting - 1
@@ -179,28 +259,28 @@ class Card():
     def predict_number(self):
         return self.known_number or CLASSIFIER.number_clf.predict(self.number_features())[0]
 
-    @memoized
-    def predict_number_old(self):
-        edges = self.edges()
+    def predict_number_old(self, edges, verbose=False):
         height, width = edges.shape
-        x = width / 2
-        count = 0
-        waiting = 0
-        for y in range(5, height-5):
-            if edges[y][x] > 0 and waiting <= 0:
-                waiting = 10
-                count = count + 1
-            waiting = waiting - 1
+        xs = [width / 2 - 10, width / 2 - 5, width / 2, width / 2 + 5, width / 2 + 10]
+        answers = []
+        for x in xs:
+            count = 0
+            waiting = 0
+            for y in range(5, height-5):
+                if edges[y,x] > 0 and waiting <= 0:
+                    waiting = 10
+                    count = count + 1
+                waiting = waiting - 1
+            answers.append(count)
 
-        count = count / 2
-        if count == 1:
-            return "one"
-        elif count == 2:
-            return "two"
-        elif count == 3:
-            return "three"
-        else:
-            return "fail"
+        if verbose:
+            print answers
+
+        if all(a == answers[0] for a in answers[1:]):
+            if answers[0] in [2, 4, 6]:
+                return answers[0] / 2
+
+        return "fail"
 
     # <codecell>
 
@@ -214,27 +294,63 @@ class Card():
         image = self.hsv()
 
         ratios = []
-        white = []
+
+        center = self.center()
         window = []
-        for tc in [(10,50), (10, 20), (10, 80)]: # topcenter row,col
+        ws = 5 # window size
+        window.append(np.mean(image[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws, 0]))
+        window.append(np.mean(image[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws, 1]))
+        window.append(np.mean(gray[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws]))
+
+        for tc in self.shading_params: # topcenter row,col
+            white = []
+
             white.append(np.mean(image[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2,0]))
             white.append(np.mean(image[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2,1]))
             white.append(np.mean(gray[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2]))
 
-            center = self.center()
-
-            ws = 2 # window size
-            window.append(np.mean(image[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws, 0]))
-            window.append(np.mean(image[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws, 1]))
-            window.append(np.mean(gray[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws]))
-
-            ratio = np.array(window) / np.array(white)
+            ratio = np.array(white)/np.array(window)
 
             ratios.append(ratio[1])
             ratios.append(ratio[2])
+        return ratios
+
+    @memoized
+    def new_shading_features(self):
+        gray = self.gray()
+        edges = self.edges()
+        # edges = self.blurred_canny()
+        # edges = cv2.Canny(gray, 404/4, 156/4, apertureSize=3)
+        height, width = gray.shape
+        image = self.hsv()
+
+        ratios = []
+        white = []
+        window = []
+        for tc in [(10,50), (10, 20), (10, 80)]: # topcenter row,col
+            h1 = cv2.calcHist( [gray[5:20, 5:width-5]], [0], None, [16], [0, 256] )
+            #white.append(np.mean(image[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2,0]))
+            #white.append(np.mean(image[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2,1]))
+            #white.append(np.mean(gray[tc[0]-2:tc[0]+2,tc[1]-2:tc[1]+2]))
+
+            center = self.center()
+            wy = 4
+            wx = 10
+
+            h2 = cv2.calcHist( [gray[center[1]-wy:center[1]+wy, center[0]-wx:center[0]+wx]], [0], None, [160], [0, 256] )
+
+            ws = 2 # window size
+            #window.append(np.mean(image[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws, 0]))
+            #window.append(np.mean(image[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws, 1]))
+            #window.append(np.mean(gray[center[1]-ws:center[1]+ws, center[0]-ws:center[0]+ws]))
+
+            #ratio = np.array(window) / np.array(white)
+
+            #ratios.append(ratio[1])
+            #ratios.append(ratio[2])
 
 
-        return ratios #[np.mean(ratios)]
+        return np.reshape(h2, np.prod(h2.shape)) #[np.mean(ratios)]
 
 
     @memoized
@@ -522,15 +638,44 @@ class Card():
             shape = shapes[np.argmax(sims)]
             return shape
 
+def cannyrows(canny):
+    height, width = canny.shape
+    features = []
+    bad_rows = 0
+    good_rows = 0
+    maxconsecgoodrows = 0
+    numrowchunks = 0
+    consec_good_rows = 0
+    scanheight = 3
+    for y in np.arange(5, height-5-scanheight, scanheight):
+        x = 5
+        found_edges = 0
+        while x < width - 5:
+            if sum(canny[y:y+scanheight,x]) > 0:
+                found_edges += 1
+                while x < width - 5 and sum(canny[y:y+scanheight,x]) > 0:
+                    x += 1
+            x += 1
+        if found_edges > 4:
+            bad_rows += 1
 
+        if found_edges == 2 or found_edges == 4:
+            good_rows += 1
+
+            if consec_good_rows == 0:
+                numrowchunks += 1
+            consec_good_rows += 1
+            maxconsecgoodrows = max(maxconsecgoodrows, consec_good_rows)
+        elif consec_good_rows > 0:
+            consec_good_rows = 0
+    return good_rows, bad_rows, numrowchunks
 
 # <codecell>
 
 def find_center(canny, number=1):
-    # x,y
-    center = (50,70)
+    center = (CARD_DIMENSIONS[0] / 2, CARD_DIMENSIONS[1] / 2)    # x,y
     if number == 2:
-        center = (50,48)
+        center = (CARD_DIMENSIONS[0] / 2, CARD_DIMENSIONS[1] / 3)
 
     for i in xrange(2):
         distRight = distance_to_edge(canny, center, 0)
@@ -541,10 +686,12 @@ def find_center(canny, number=1):
         distDown = distance_to_edge(canny, center, 3*np.pi/2)
         center = (center[0], center[1] + (distUp - distDown) / 2)
 
-    center = (int(center[0]), int(center[1]))
+    center = (ir(center[0]), ir(center[1]))
     return center
 
 # <codecell>
+def ir(x): #int round
+    return int(round(x))
 
 def distance_to_edge(canny, pt, direction):
     dist = 0.0
@@ -552,7 +699,7 @@ def distance_to_edge(canny, pt, direction):
     dx = np.cos(direction)
     dy = np.sin(direction)
     while dist < 50 and not is_edge_at(canny, point):
-        point = (int(pt[0] + dist * dx), int(pt[1] + dist * dy))
+        point = (ir(pt[0] + dist * dx), ir(pt[1] + dist * dy))
         dist += 1
     return dist
 
@@ -591,7 +738,7 @@ def colors_at_edges(canny, hsv, point):
 
 def is_edge_at(canny, point):
     # point is x,y
-    y,x = int(point[0]), int(point[1])
+    x,y = ir(point[0]), ir(point[1])
     window = canny[y-1:y+1,x-1:x+1]
     return np.sum(window) > 0
 
@@ -599,11 +746,6 @@ def is_edge_at(canny, point):
 
 def similarity(a1,a2):
     return 1 - np.sqrt(sum(a1-a2)**2)
-
-# <codecell>
-
-CARD_DIMENSIONS = (200*2/3, 280*2/3)
-CARD_DIMENSIONS = (100, 140)
 
 # <codecell>
 
@@ -775,14 +917,16 @@ def test(X,Y):
         colorok = card.predict_color() == labels[COLOR]
         shapeok = card.predict_shape() == labels[SHAPE]
 
-
-        if not shapeok:
+        if not shadingok:
             image = card.image.copy()
-            card.opencv_show_detailed()
+            # card.opencv_show_canny()
+            card.opencv_show_detailed_shading()
+            # print card.number_features()
+            # print card.number_features2()
             print "Predict: ", ' '.join(str(x) for x in card.labels())
             print "Actual:  ", ' '.join(labels)
             print
-            # cv2.waitKey(0)
+            cv2.waitKey(0)
 
         counts[NUMBER] += numberok
         counts[SHADING] += shadingok
@@ -808,6 +952,10 @@ def test_cards_main():
 
     train(trainX, trainY)
 
+    # for card, label in zip(X, Y):
+    #     card.opencv_show_detailed()
+    # print "Moving on..."
+
     test(testX, testY)
 
 # <codecell>
@@ -824,6 +972,7 @@ def main():
         looking_at = 0
 
         frame = cv2.resize(frame, (640,480))
+        framecopy = frame.copy()
         #quads = []
         #for i in range(0, 7):
         #    quads.extend(card_finder.find_cards_with_parameter_setting(frame, i))
@@ -845,6 +994,10 @@ def main():
         else:
             image = mark_quads(frame, quads)
         cv2.imshow('win', image)
+        gray = cv2.cvtColor(framecopy,cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray, 404/2, 156/2, apertureSize=3)
+        cv2.imshow('win2', edges)
+        cv2.moveWindow('win2', 500,0)
 
         looking_at = 0
 
@@ -918,13 +1071,16 @@ def calc_sets(card_list):
                 if k == i or k == j:
                     continue
                 is_ok = True
+                all_same = True
                 for l in range(4):
+                    if not (cardi.labels()[l] == cardj.labels()[l] == cardk.labels()[l]):
+                        all_same = False
                     if not ((cardi.labels()[l] == cardj.labels()[l] == cardk.labels()[l]) or
                         (cardi.labels()[l] != cardj.labels()[l] and
                         cardj.labels()[l] != cardk.labels()[l] and
                         cardk.labels()[l] != cardi.labels()[l])):
                         is_ok = False
-                if is_ok:
+                if is_ok and not all_same:
                     return i,j,k
     return None
 
@@ -959,17 +1115,17 @@ if __name__ == '__main__':
     # Global
     CLASSIFIER = Classifier()
 
-    run_tests = True
+    run_tests = False
 
     if run_tests:
         test_cards_main()
     else:
         #showcards(trainX, trainY)
-        trainX, trainY = gen_data("data/positive_new_data.txt")
+        trainX, trainY = gen_data("data/total_data.txt")
 
         perm = range(len(trainX))
         random.shuffle(perm)
-        N = 1000
+        N = 5000
         trainX = trainX[perm[:N]]
         trainY = trainY[perm[:N]]
 

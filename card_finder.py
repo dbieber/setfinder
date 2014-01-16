@@ -465,8 +465,6 @@ def new_card_finder(image):
     gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
     #clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
     #gray = clahe.apply(gray)
-    sobelx = cv2.Sobel(gray,cv2.CV_64F,1,0,ksize=5)
-    sobely = cv2.Sobel(gray,cv2.CV_64F,0,1,ksize=5)
 
     #gray = cv2.blur(gray, (3, 3))
     edges = cv2.Canny(gray, 404/2, 156/2, apertureSize=3)
@@ -485,17 +483,18 @@ def new_card_finder(image):
         for i in range(height):
             for j in range(width):
                 if edges[i, j] > 1:
-                    flag = True
+                    flag = 0
                     bounds = 1
-                    while flag and bounds < 3:
+                    while flag < 2 and bounds < 3:
                         for k in range(-bounds, bounds+1):
                             for l in range(-bounds, bounds+1):
                                 if abs(k) == bounds or abs(l) == bounds:
                                     if 0 <= i + k < height and 0 <= j + l < width and edges[i+k, j+l] > 0:
                                         index2 = convert_to_flatened_index(i+k, j+l)
-                                        flag = False
+                                        flag += 1
                                         G.add_edge(index, index2)
                         bounds = bounds + 1
+
                 index = index + 1
         return G
 
@@ -513,6 +512,7 @@ def new_card_finder(image):
                 (i, j) = convert_from_flatened_index(index)
                 connected_edges[i, j] = [100, 50, 0]
             """
+
 
             nodes = g.nodes()
             use_node = None
@@ -578,49 +578,115 @@ def new_card_finder(image):
                 for c in corners:
                     cv2.circle(connected_edges, c, 3, (250, 50, 0), thickness=-1)
                 """
-    """
-    cv2.imshow('connected_edges', connected_edges)
-    cv2.waitKey(0)
-    """
+
+        """
+        cv2.imshow('connected_edges', connected_edges)
+        cv2.waitKey(0)
+        """
+
     def keep_rectangles(quads):
-        final_quads = []
-        for q in quads:
+        final_quads = quads
+        # for q in quads:
+        #     for i in range(len(q)):
+        #         q1 = np.array(q[i])
+        #         q2 = np.array(q[(i+1)%len(q)])
+        #         q3 = np.array(q[(i+2)%len(q)])
+        #         v1 = q2-q1
+        #         v2 = q2-q3
+        #         if abs(np.dot(v1, v2))/(np.linalg.norm(v1)*np.linalg.norm(v2)) < .5:
+        #             final_quads.append(q)
+        print final_quads
+
+        def inside_quad(q, p):
+            neg = True
+            pos = True
+            p = np.array(p)
             for i in range(len(q)):
                 q1 = np.array(q[i])
-                q2 = np.array(q[(i+1)%len(q[i])])
-                q3 = np.array(q[(2+1)%len(q[i])])
+                q2 = np.array(q[(i+1)%len(q)])
+
                 v1 = q2-q1
-                v2 = q2-q3
-                if abs(np.dot(v1, v2))/(np.linalg.norm(v1)*np.linalg.norm(v2)) < .5:
-                    final_quads.append(q)
-        return final_quads
+                v2 = p-q1
+                cross = np.cross(v1, v2)
+                print p,q1,q2,v1,v2,len(q)
+                print "cross " + str(cross)
+                if cross < 0:
+                    pos = False
+                if cross > 0:
+                    neg = False
+
+            return neg or pos
+
+        real_final_quads = []
+        for i, q in enumerate(final_quads):
+            in_any_quad = False
+            for j, q2 in enumerate(final_quads):
+                if i == j:
+                    continue
+
+                all_inside_q2 = True
+                for p in q:
+                    if not inside_quad(q2, p):
+                        all_inside_q2 = False
+                        break
+                if all_inside_q2:
+                    in_any_quad = True
+                    break
+            if not in_any_quad:
+                real_final_quads.append(q)
+
+        return real_final_quads
 
     quads = reduce_quads(quads)
     return keep_rectangles(quads)
 
 def test_card_finder():
-    image = cv2.imread(sys.argv[1])
-    image = cv2.resize(image, (640,480))
-    quads = []
-    quads.extend(new_card_finder(image))
-    #for i in range(0, 1):
-    #    quads.extend(find_cards_with_parameter_setting(image, i))
+    def run_test(image):
+        image = cv2.resize(image, (640,480))
+        quads = []
+        quads.extend(new_card_finder(image))
+        #for i in range(0, 1):
+        #    quads.extend(find_cards_with_parameter_setting(image, i))
 
-    quads = reduce_quads(quads)
-    quads = rotate_quads(quads)
-    cards = []
-    """
-    for q in quads:
-        card = Card(rectify(image, q))
-        if not card.fail():
-            cards.append(card)
+        quads = reduce_quads(quads)
+        quads = rotate_quads(quads)
+        cards = []
+        """
+        for q in quads:
+            card = Card(rectify(image, q))
+            if not card.fail():
+                cards.append(card)
 
-    print set(' '.join(c.labels()) for c in cards)
-    """
+        print set(' '.join(c.labels()) for c in cards)
+        """
 
-    image = setfinder.mark_quads(image, quads)
-    cv2.imshow('win', image)
-    cv2.waitKey(0)
+        image = setfinder.mark_quads(image, quads)
+        cv2.imshow('win', image)
+        cv2.waitKey(0)
+
+    if len(sys.argv) > 1:
+        image = cv2.imread(sys.argv[1])
+        run_test(image)
+    else:
+        vc = cv2.VideoCapture(0)
+        cv2.namedWindow('win', cv2.CV_WINDOW_AUTOSIZE)
+
+        if vc.isOpened(): # try to get the first frame
+            rval, frame = vc.read()
+        else:
+            rval = False
+
+        while True:
+            rval, frame = vc.read()
+            key = cv2.waitKey(10)
+            if frame is None:
+                continue
+            else:
+                run_test(frame)
+
+            if key == 27: # exit on ESC
+                break
+
 
 if __name__ == '__main__':
     test_card_finder()
